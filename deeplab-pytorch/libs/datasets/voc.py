@@ -29,10 +29,10 @@ class VOC(_BaseDataset):
 
     def _set_files(self):
         self.root = osp.join(self.root, "VOC{}".format(self.year))
-        self.image_dir = osp.join(self.root, "JPEGImages")
-        self.label_dir = osp.join(self.root, "SegmentationClass")
+        self.image_dir = osp.join(self.root, "JPEGImages_subset") # changed dataset here
+        self.label_dir = osp.join(self.root, "SegmentationClass_subset") # changed label here
 
-        if self.split in ["train", "trainval", "val", "test"]:
+        if self.split in ["train", "trainval", "val", "test", "subset"]: # added subset here
             file_list = osp.join(
                 self.root, "ImageSets/Segmentation", self.split + ".txt"
             )
@@ -48,6 +48,7 @@ class VOC(_BaseDataset):
         image_path = osp.join(self.root, self.image_dir, image_id + ".jpg")
         label_path = osp.join(self.root, self.label_dir, image_id + ".png")
         # Load an image
+        print(image_path)
         image = cv2.imread(image_path, cv2.IMREAD_COLOR).astype(np.float32)
         label = np.asarray(Image.open(label_path), dtype=np.int32)
         return image_id, image, label
@@ -100,7 +101,7 @@ if __name__ == "__main__":
 
     dataset = VOCAug(
         root="/media/kazuto1011/Extra/VOCdevkit",
-        split="train_aug",
+        split="train", #train_aug
         ignore_label=255,
         mean_bgr=(104.008, 116.669, 122.675),
         year=2012,
