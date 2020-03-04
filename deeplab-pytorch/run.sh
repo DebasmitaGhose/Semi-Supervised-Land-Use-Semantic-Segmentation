@@ -1,8 +1,10 @@
 #!/bin/bash
 #SBATCH --job-name=DeepLab_VOC
-#SBATCH --ntasks=2 --nodes=1
+#SBATCH --ntasks=1 --nodes=1
+#SBATCH --ntasks-per-node=20
 #SBATCH --mem-per-cpu=5G
 #SBATCH --time=24:00:00
+#SBATCH --partition=gpu
 #SBATCH --mail-type=ALL
 #SBATCH --mail-user=dghose@cs.umass.edu
 
