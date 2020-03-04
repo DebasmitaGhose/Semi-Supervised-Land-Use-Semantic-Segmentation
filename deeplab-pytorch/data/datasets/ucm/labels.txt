@@ -1,0 +1,18 @@
+0       __background__   
+1	aeroplane
+2	bare soil
+3	buildings
+4	cars
+5	chaparral
+6	court
+7	dock
+8	field
+9	grass
+10	mobile home
+11	pavement
+12	sand
+13	sea
+14	ship
+15	tanks
+16	trees
+17	water
