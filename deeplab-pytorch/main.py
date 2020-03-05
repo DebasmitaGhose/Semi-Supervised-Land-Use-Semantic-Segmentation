@@ -262,7 +262,7 @@ def train(config_path, cuda):
                     iteration,
                 )
 
-            if False:
+            if True:
                 for name, param in model.module.base.named_parameters():
                     name = name.replace(".", "/")
                     # Weight/gradient distribution
