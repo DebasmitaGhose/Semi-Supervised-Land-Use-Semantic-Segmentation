@@ -83,6 +83,11 @@ def resize_labels(labels, size):
     new_labels = torch.LongTensor(new_labels)
     return new_labels
 
+def load_ckp(checkpoint_fpath, model, optimizer):
+    checkpoint = torch.load(checkpoint_fpath)
+    model.load_state_dict(checkpoint['state_dict'])
+    optimizer.load_state_dict(checkpoint['optimizer'])
+    return model, optimizer, checkpoint['epoch']
 
 @click.group()
 @click.pass_context
@@ -144,6 +149,7 @@ def train(config_path, cuda):
     ), 'Currently support only "DeepLabV2_ResNet101_MSC"'
 
     # Model setup
+    checkpoint_path = 'data/models/ucm1/deeplabv2_resnet101_msc/train/checkpoint_final.pth' 
     model = eval(CONFIG.MODEL.NAME)(n_classes=CONFIG.DATASET.N_CLASSES)
     state_dict = torch.load(CONFIG.MODEL.INIT_MODEL)
     print("    Init:", CONFIG.MODEL.INIT_MODEL)
@@ -151,6 +157,8 @@ def train(config_path, cuda):
         if m not in state_dict.keys():
             print("    Skip init:", m)
     model.base.load_state_dict(state_dict, strict=False)  # to skip ASPP
+    state_dict_2 = torch.load(checkpoint_path)
+    model.load_state_dict(state_dict_2) 
     model = nn.DataParallel(model)
     model.to(device)
 
