@@ -243,6 +243,8 @@ def train(config_path, cuda):
             loss += float(iter_loss)
 
         average_loss.add(loss)
+	
+        print("Epoch = ", iteration, ", Loss = ", average_loss)
 
         # Update weights with accumulated gradients
         optimizer.step()
