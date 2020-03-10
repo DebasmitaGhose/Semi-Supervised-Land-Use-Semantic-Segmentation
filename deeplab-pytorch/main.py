@@ -1,7 +1,4 @@
-#!/usr/bin/env python
-# coding: utf-8
-#
-# Author: Kazuto Nakashima
+#uthor: Kazuto Nakashima
 # URL:    https://kazuto1011.github.io
 # Date:   07 January 2019
 
@@ -149,7 +146,7 @@ def train(config_path, cuda):
     ), 'Currently support only "DeepLabV2_ResNet101_MSC"'
 
     # Model setup
-    checkpoint_path = 'data/models/ucm1/deeplabv2_resnet101_msc/train/checkpoint_final.pth' 
+    #checkpoint_path = 'data/models/ucm2/deeplabv2_resnet101_msc/train/checkpoint_final.pth' 
     model = eval(CONFIG.MODEL.NAME)(n_classes=CONFIG.DATASET.N_CLASSES)
     state_dict = torch.load(CONFIG.MODEL.INIT_MODEL)
     print("    Init:", CONFIG.MODEL.INIT_MODEL)
@@ -157,7 +154,8 @@ def train(config_path, cuda):
         if m not in state_dict.keys():
             print("    Skip init:", m)
     model.base.load_state_dict(state_dict, strict=False)  # to skip ASPP
-    state_dict_2 = torch.load(checkpoint_path)
+    state_dict_2 = torch.load(CONFIG.MODEL.CHECKPOINT)
+    print('Restoring from Checkpoint = ', CONFIG.MODEL.CHECKPOINT)
     model.load_state_dict(state_dict_2) 
     model = nn.DataParallel(model)
     model.to(device)

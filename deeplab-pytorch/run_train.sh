@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH --job-name=trainDeepLab_VOC
-#SBATCH --ntasks=5 --nodes=1
+#SBATCH --ntasks=6 --nodes=1
 #SBATCH --mem-per-cpu=20G
 #SBATCH --time=48:00:00
 #SBATCH --mail-type=ALL
@@ -15,5 +15,5 @@
 
 python main.py train --config-path configs/ucm.yaml --cuda
 
-#python main.py test --config-path configs/ucm.yaml --model-path data/models/ucm2/deeplabv2_resnet101_msc/train/checkpoint_100.pth --cuda
+#python main.py test --config-path configs/ucm.yaml --model-path data/models/ucm4/deeplabv2_resnet101_msc/train/checkpoint_final.pth --cuda
 
