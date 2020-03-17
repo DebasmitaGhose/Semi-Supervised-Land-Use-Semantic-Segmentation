@@ -1,0 +1,9 @@
+class  0 background   IU 0.85
+class  1 aeroplane    IU 0.61
+class  2 bicycle      IU 0.90
+class  3 bird         IU 0.85
+class  4 boat         IU 0.83
+class  5 bottle       IU 0.66
+class  6 bus          IU 0.78
+class  7 car          IU 0.53
+meanIOU: 0.7507033098396403
