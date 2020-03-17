@@ -7,6 +7,7 @@ from __future__ import absolute_import, division, print_function
 import json
 import multiprocessing
 import os
+import pdb
 
 import click
 import joblib
@@ -144,7 +145,7 @@ def train(config_path, cuda):
     assert (
         CONFIG.MODEL.NAME == "DeepLabV2_ResNet101_MSC"
     ), 'Currently support only "DeepLabV2_ResNet101_MSC"'
-
+    pdb.set_trace()
     # Model setup
     #checkpoint_path = 'data/models/ucm2/deeplabv2_resnet101_msc/train/checkpoint_final.pth' 
     model = eval(CONFIG.MODEL.NAME)(n_classes=CONFIG.DATASET.N_CLASSES)

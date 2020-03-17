@@ -32,7 +32,7 @@ MODEL:
     N_BLOCKS: [3, 4, 23, 3]
     ATROUS_RATES: [6, 12, 18, 24]
     INIT_MODEL: data/models/coco/deeplabv1_resnet101/caffemodel/deeplabv1_resnet101-coco.pth
-    CHECKPOINT: data/models/ucm3/deeplabv2_resnet101_msc/train/checkpoint_final.pth
+    CHECKPOINT: data/models/ucm4/deeplabv2_resnet101_msc/train/checkpoint_final.pth
 
 SOLVER:
     BATCH_SIZE:
