@@ -219,6 +219,8 @@ def main():
         interp = nn.Upsample(size=(512, 1024), mode='bilinear', align_corners=True)
     
     data_list = []
+    gt_list = []
+    output_list = []
     colorize = VOCColorize()
    
     if args.with_mlmt:
@@ -228,7 +230,7 @@ def main():
         mlmt_preds[mlmt_preds<0.2] = 0 
  
     for index, batch in enumerate(testloader):
-        if index % 100 == 0:
+        if index % 1 == 0:
             print('%d processd'%(index))
         image, label, size, name, _ = batch
         size = size[0]
@@ -260,10 +262,20 @@ def main():
                 scipy.misc.imsave(filename, gt)
         
         data_list.append([gt.flatten(), output.flatten()])
-    
+        gt_list.append(gt)
+        output_list.append(output)
+        #score = scores(data_list[0], output.flatten(), args.num_classes)
+        #print(score)
+    print(np.shape(data_list[0][:]),'data list')
     filename = os.path.join(args.save_dir, 'result.txt')
-    #get_iou(args, data_list, args.num_classes, filename)
-    score = scores(gt, output, args.num_classes)
+        #get_iou(args, data_list, args.num_classes, filename)
+    print(np.shape(gt), 'gt')
+    print(gt==output, 'gt')
+    print(np.shape(output), 'output')
+    print(output, 'output')
+    print(np.shape(gt_list[0]), 'gt list')
+    print(np.shape(output_list[0]), 'output list')
+    score = scores(gt_list, output_list, args.num_classes)
     print(score)
 
 
