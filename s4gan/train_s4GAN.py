@@ -386,21 +386,15 @@ def main():
 
         images, labels, _, _, _ = batch
         images = Variable(images).cuda(args.gpu)
-        logits = model(images)
+        pred = interp(model(images))
         #import pdb
         #pdb.set_trace()
         _, H, W = labels.shape
         #logits = F.interpolate(
         #    logits, size=(H, W), mode="bilinear", align_corners=False
         #)
-        import pdb
-        pdb.set_trace()
-        loss_ce = 0
-        for logit in logits:
-            pred = interp(logit)     
-            loss_ce += loss_calc(pred,labels,args.gpu)
         
-        #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
+        loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
@@ -411,9 +405,7 @@ def main():
         images_remain, _, _, _, _ = batch_remain
         images_remain = Variable(images_remain).cuda(args.gpu)
         
-        logits = model(images_remain)
-        for logit in logits:
-            pred_remain=interp(logit) 
+        pred_remain = interp(model(images_remain))
              
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))

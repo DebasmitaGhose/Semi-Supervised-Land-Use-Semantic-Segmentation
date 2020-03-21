@@ -25,12 +25,15 @@ class MSC(nn.Module):
 
     def forward(self, x):
         # Original
+        import pdb
+        #pdb.set_trace()
         logits = self.base(x)
+        '''
         _, _, H, W = logits.shape
         interp = lambda l: F.interpolate(
             l, size=(H, W), mode="bilinear", align_corners=False
         )
-
+         
         # Scaled
         logits_pyramid = []
         for p in self.scales:
@@ -45,3 +48,5 @@ class MSC(nn.Module):
             return [logits] + logits_pyramid + [logits_max]
         else:
             return logits_max
+        '''
+        return logits
