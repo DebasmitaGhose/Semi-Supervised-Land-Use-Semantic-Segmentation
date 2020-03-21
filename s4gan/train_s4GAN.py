@@ -18,15 +18,17 @@ from torch.utils import data, model_zoo
 from torch.autograd import Variable
 import torchvision.transforms as transform
 
-from model.deeplabv2 import Res_Deeplab
+#from model.deeplabv2 import Res_Deeplab
 #from model.deeplabv3p import Res_Deeplab 
+from model import *
+
 
 from model.discriminator import s4GAN_discriminator
 from utils.loss import CrossEntropy2d
 from data.voc_dataset import VOCDataSet, VOCGTDataSet
 from data import get_loader, get_data_path
 from data.augmentations import *
-
+from utils.lr_scheduler import PolynomialLR
 start = timeit.default_timer()
 
 DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
@@ -37,24 +39,25 @@ IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 NUM_CLASSES = 21 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
 DATASET = 'pascal_voc' #pascal_voc or pascal_context 
 
-SPLIT_ID = './splits/voc/split_0.pkl'
 
 MODEL = 'DeepLab'
-BATCH_SIZE = 4
+BATCH_SIZE = 1
 NUM_STEPS = 40000
 SAVE_PRED_EVERY = 5000
 
 INPUT_SIZE = '321,321'
 IGNORE_LABEL = 255 # 255 for PASCAL-VOC / -1 for PASCAL-Context / 250 for Cityscapes
 
-RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'
-
+#RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'
+RESTORE_FROM = './pretrained_models/deeplabv2_resnet101_msc-vocaug-20000.pth'
 LEARNING_RATE = 2.5e-4
 LEARNING_RATE_D = 1e-4
 POWER = 0.9
+LR_DECAY = 10
 WEIGHT_DECAY = 0.0005
+ITER_MAX = 20000
 MOMENTUM = 0.9
-NUM_WORKERS = 4
+NUM_WORKERS = 0
 RANDOM_SEED = 1234
 
 LAMBDA_FM = 0.1
@@ -84,8 +87,6 @@ def get_arguments():
                         help="Path to the file listing the images in the dataset.")
     parser.add_argument("--labeled-ratio", type=float, default=LABELED_RATIO,
                         help="ratio of the labeled data to full dataset")
-    parser.add_argument("--split-id", type=str, default=SPLIT_ID,
-                        help="split order id")
     parser.add_argument("--input-size", type=str, default=INPUT_SIZE,
                         help="Comma-separated string with height and width of images.")
     parser.add_argument("--learning-rate", type=float, default=LEARNING_RATE,
@@ -187,6 +188,27 @@ def find_good_maps(D_outs, pred_all):
 
 criterion = nn.BCELoss()
 
+def get_params(model, key):
+    # For Dilated FCN
+    if key == "1x":
+        for m in model.named_modules():
+            if "layer" in m[0]:
+                if isinstance(m[1], nn.Conv2d):
+                    for p in m[1].parameters():
+                        yield p
+    # For conv weight in the ASPP module
+    if key == "10x":
+        for m in model.named_modules():
+            if "aspp" in m[0]:
+                if isinstance(m[1], nn.Conv2d):
+                    yield m[1].weight
+    # For conv bias in the ASPP module
+    if key == "20x":
+        for m in model.named_modules():
+            if "aspp" in m[0]:
+                if isinstance(m[1], nn.Conv2d):
+                    yield m[1].bias
+
 def main():
     print (args)
 
@@ -197,8 +219,8 @@ def main():
     gpu = args.gpu
 
     # create network
-    model = Res_Deeplab(num_classes=args.num_classes)
-    
+    #model = Res_Deeplab(num_classes=args.num_classes)
+    model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
     # load pretrained parameters
     saved_state_dict = torch.load(args.restore_from)
     
@@ -208,6 +230,7 @@ def main():
             new_params[name].copy_(saved_state_dict[name])
     model.load_state_dict(new_params)
     
+    model  = nn.DataParallel(model)
     model.train()
     model.cuda(args.gpu)
 
@@ -252,24 +275,20 @@ def main():
 
     if args.labeled_ratio is None:
         trainloader = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+                        batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
         trainloader_gt = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+                        batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
         
         trainloader_remain = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, shuffle=True, num_workers=4, pin_memory=True)
+                        batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
         trainloader_remain_iter = iter(trainloader_remain)
 
     else:
         partial_size = int(args.labeled_ratio * train_dataset_size)
         
-        if args.split_id is not None:
-            train_ids = pickle.load(open(args.split_id, 'rb'))
-            print('loading train ids from {}'.format(args.split_id))
-        else:
-            train_ids = np.arange(train_dataset_size)
-            np.random.shuffle(train_ids)
+        train_ids = np.arange(train_dataset_size)
+        np.random.shuffle(train_ids)
         
         pickle.dump(train_ids, open(os.path.join(args.checkpoint_dir, 'train_voc_split.pkl'), 'wb'))
         
@@ -278,11 +297,11 @@ def main():
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
 
         trainloader = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, sampler=train_sampler, num_workers=4, pin_memory=True)
+                        batch_size=args.batch_size, sampler=train_sampler, num_workers=0, pin_memory=True)
         trainloader_remain = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, sampler=train_remain_sampler, num_workers=4, pin_memory=True)
+                        batch_size=args.batch_size, sampler=train_remain_sampler, num_workers=0, pin_memory=True)
         trainloader_gt = data.DataLoader(train_dataset,
-                        batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=4, pin_memory=True)
+                        batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=0, pin_memory=True)
 
         trainloader_remain_iter = iter(trainloader_remain)
 
@@ -290,9 +309,41 @@ def main():
     trainloader_gt_iter = iter(trainloader_gt)
 
     # optimizer for segmentation network
-    optimizer = optim.SGD(model.optim_parameters(args),
-                lr=args.learning_rate, momentum=args.momentum,weight_decay=args.weight_decay)
-    optimizer.zero_grad()
+    #optimizer = optim.SGD(model.optim_parameters(args),
+    #            lr=args.learning_rate, momentum=args.momentum,weight_decay=args.weight_decay)
+    #optimizer.zero_grad()
+
+    
+    optimizer = torch.optim.SGD(
+        # cf lr_mult and decay_mult in train.prototxt
+        params=[
+            {
+                "params": get_params(model.module, key="1x"),
+                "lr": LEARNING_RATE,
+                "weight_decay": WEIGHT_DECAY,
+            },
+            {
+                "params": get_params(model.module, key="10x"),
+                "lr": 10 * LEARNING_RATE,
+                "weight_decay": WEIGHT_DECAY,
+            },
+            {
+                "params": get_params(model.module, key="20x"),
+                "lr": 20 * LEARNING_RATE,
+                "weight_decay": 0.0,
+            },
+        ],
+        momentum=MOMENTUM,
+    )
+
+    # Learning rate scheduler
+    scheduler = PolynomialLR(
+        optimizer=optimizer,
+        step_size=LR_DECAY,
+        iter_max=ITER_MAX,
+        power=POWER,
+    )
+
 
     # optimizer for discriminator network
     optimizer_D = optim.Adam(model_D.parameters(), lr=args.learning_rate_D, betas=(0.9,0.99))
@@ -306,16 +357,18 @@ def main():
 
     y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).cuda()), Variable(torch.zeros(args.batch_size, 1).cuda())
 
-
+    #import pdb
+    #pdb.set_trace()
     for i_iter in range(args.num_steps):
 
+        print('iter',i_iter) 
         loss_ce_value = 0
         loss_D_value = 0
         loss_fm_value = 0
         loss_S_value = 0
 
         optimizer.zero_grad()
-        adjust_learning_rate(optimizer, i_iter)
+        # adjust_learning_rate(optimizer, i_iter)
         optimizer_D.zero_grad()
         adjust_learning_rate_D(optimizer_D, i_iter)
 
@@ -333,9 +386,21 @@ def main():
 
         images, labels, _, _, _ = batch
         images = Variable(images).cuda(args.gpu)
-        pred = interp(model(images))
-        loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
+        logits = model(images)
+        #import pdb
+        #pdb.set_trace()
+        _, H, W = labels.shape
+        #logits = F.interpolate(
+        #    logits, size=(H, W), mode="bilinear", align_corners=False
+        #)
+        import pdb
+        pdb.set_trace()
+        loss_ce = 0
+        for logit in logits:
+            pred = interp(logit)     
+            loss_ce += loss_calc(pred,labels,args.gpu)
         
+        #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
@@ -345,8 +410,11 @@ def main():
         
         images_remain, _, _, _, _ = batch_remain
         images_remain = Variable(images_remain).cuda(args.gpu)
-        pred_remain = interp(model(images_remain))
         
+        logits = model(images_remain)
+        for logit in logits:
+            pred_remain=interp(logit) 
+             
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
         #print (pred_remain.size(), images_remain.size())
@@ -416,6 +484,7 @@ def main():
 
         optimizer.step()
         optimizer_D.step()
+        scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value))
 

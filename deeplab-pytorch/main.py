@@ -377,7 +377,8 @@ def test(config_path, model_path, cuda):
     ):
         # Image
         images = images.to(device)
-
+        import pdb
+        pdb.set_trace()
         # Forward propagation
         logits = model(images)
 

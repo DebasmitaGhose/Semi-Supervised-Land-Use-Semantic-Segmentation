@@ -32,6 +32,8 @@ class VOCDataSet(data.Dataset):
                 "label": label_file,
                 "name": name
             })
+        print('len of file list',len(self.files))
+        print('sample',self.files[0])
 
     def __len__(self):
         return len(self.files)
@@ -43,6 +45,7 @@ class VOCDataSet(data.Dataset):
         return image, label
 
     def __getitem__(self, index):
+        print(index)
         datafiles = self.files[index]
         image = cv2.imread(datafiles["img"], cv2.IMREAD_COLOR)
         label = cv2.imread(datafiles["label"], cv2.IMREAD_GRAYSCALE)
