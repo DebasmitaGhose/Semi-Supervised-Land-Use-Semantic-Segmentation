@@ -17,6 +17,7 @@ import torch.backends.cudnn as cudnn
 from torch.utils import data, model_zoo
 from torch.autograd import Variable
 import torchvision.transforms as transform
+from tensorboardX import SummaryWriter
 
 #from model.deeplabv2 import Res_Deeplab
 #from model.deeplabv3p import Res_Deeplab 
@@ -31,9 +32,8 @@ from data.augmentations import *
 from utils.lr_scheduler import PolynomialLR
 start = timeit.default_timer()
 
-DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
-DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/subset.txt'
-CHECKPOINT_DIR = './checkpoints/voc_semi_0_125/'
+DATA_DIRECTORY = '/home/amth_dg777/project/VOCdevkit/VOC2012'
+DATA_LIST_PATH = '/home/amth_dg777/project/VOCdevkit/VOC2012/ImageSets/Segmentation/subset.txt'
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 NUM_CLASSES = 21 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
@@ -48,8 +48,8 @@ SAVE_PRED_EVERY = 5000
 INPUT_SIZE = '321,321'
 IGNORE_LABEL = 255 # 255 for PASCAL-VOC / -1 for PASCAL-Context / 250 for Cityscapes
 
-#RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'
-RESTORE_FROM = './pretrained_models/deeplabv2_resnet101_msc-vocaug-20000.pth'
+RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'
+#### DEFAULT VALUES USED FOR THESE######################################
 LEARNING_RATE = 2.5e-4
 LEARNING_RATE_D = 1e-4
 POWER = 0.9
@@ -62,10 +62,12 @@ RANDOM_SEED = 1234
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
-THRESHOLD_ST = 0.6 # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
-
+THRESHOLD_ST = 0.6
+EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
+#####################################################
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
-
+EXP_OUTPUT_DIR = './s4gan_files'
+EXP_ID="default"
 def get_arguments():
     """Parse all the arguments provided from the CLI.
 
@@ -73,6 +75,10 @@ def get_arguments():
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
+    parser.add_argument("--dataset-split",type=str,default="train",
+                        help="train,val,test,subset")
+    parser.add_argument("--exp-id",type=str,default=EXP_ID,
+                        help="unique id to identify all files of an experiment:weights,viz,logs,etc.")
     parser.add_argument("--model", type=str, default=MODEL,
                         help="available options : DeepLab/DRN")
     parser.add_argument("--dataset", type=str, default=DATASET,
@@ -121,8 +127,6 @@ def get_arguments():
                         help="Where restore model parameters from.")
     parser.add_argument("--save-pred-every", type=int, default=SAVE_PRED_EVERY,
                         help="Save summaries and checkpoint every often.")
-    parser.add_argument("--checkpoint-dir", type=str, default=CHECKPOINT_DIR,
-                        help="Where to save checkpoints of the model.")
     parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY,
                         help="Regularisation parameter for L2-loss.")
     parser.add_argument("--gpu", type=int, default=0,
@@ -165,13 +169,21 @@ def compute_argmax_map(output):
     output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
     output = torch.from_numpy(output).float()
     return output
+
+def makedirs(dirs):
+    if not os.path.exists(dirs):
+        os.makedirs(dirs)
      
 def find_good_maps(D_outs, pred_all):
     count = 0
+    indexes=[]
     for i in range(D_outs.size(0)):
         if D_outs[i] > args.threshold_st:
             count +=1
-
+            indexes.append(i)
+             
+    #import pdb
+    #pdb.set_trace()
     if count > 0:
         print ('Above ST-Threshold : ', count, '/', args.batch_size)
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
@@ -182,9 +194,9 @@ def find_good_maps(D_outs, pred_all):
                 pred_sel[num_sel] = pred_all[j]
                 label_sel[num_sel] = compute_argmax_map(pred_all[j])
                 num_sel +=1
-        return  pred_sel.cuda(), label_sel.cuda(), count  
+        return  pred_sel.cuda(), label_sel.cuda(), count, indexes
     else:
-        return 0, 0, count 
+        return torch.Tensor(), torch.Tensor(), count, indexes 
 
 criterion = nn.BCELoss()
 
@@ -244,9 +256,6 @@ def main():
     model_D.train()
     model_D.cuda(args.gpu)
 
-    if not os.path.exists(args.checkpoint_dir):
-        os.makedirs(args.checkpoint_dir)
-
     if args.dataset == 'pascal_voc':    
         train_dataset = VOCDataSet(args.data_dir, args.data_list, crop_size=input_size,
                         scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
@@ -271,7 +280,7 @@ def main():
         #train_gt_dataset = data_loader( data_path, is_transform=True, augmentations=data_aug) 
 
     train_dataset_size = len(train_dataset)
-    print ('dataset size: ', train_dataset_size)
+    #print ('dataset size: ', train_dataset_size)
 
     if args.labeled_ratio is None:
         trainloader = data.DataLoader(train_dataset,
@@ -289,9 +298,7 @@ def main():
         
         train_ids = np.arange(train_dataset_size)
         np.random.shuffle(train_ids)
-        
-        pickle.dump(train_ids, open(os.path.join(args.checkpoint_dir, 'train_voc_split.pkl'), 'wb'))
-        
+       
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
         train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -357,11 +364,34 @@ def main():
 
     y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).cuda()), Variable(torch.zeros(args.batch_size, 1).cuda())
 
+    # Setup loss logger
+    writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
+    #average_loss = MovingAverageValueMeter(SOLVER.AVERAGE_LOSS)
+
+    # Path to save models
+    checkpoint_dir = os.path.join(
+        EXP_OUTPUT_DIR,
+        "models",
+        args.exp_id,
+        args.dataset_split
+    )
+    if not os.path.exists(checkpoint_dir):
+        makedirs(checkpoint_dir)
+    print("Checkpoint dst:", checkpoint_dir)
+
+    generator_viz_dir = os.path.join(
+        EXP_OUTPUT_DIR,
+        "generator_viz",
+        args.exp_id,
+        args.dataset_split
+    )
+    if not os.path.exists(generator_viz_dir):
+        os.makedirs(generator_viz_dir)        
     #import pdb
     #pdb.set_trace()
     for i_iter in range(args.num_steps):
 
-        print('iter',i_iter) 
+        #print('iter',i_iter) 
         loss_ce_value = 0
         loss_D_value = 0
         loss_fm_value = 0
@@ -387,9 +417,9 @@ def main():
         images, labels, _, _, _ = batch
         images = Variable(images).cuda(args.gpu)
         pred = interp(model(images))
+       
         #import pdb
         #pdb.set_trace()
-        _, H, W = labels.shape
         #logits = F.interpolate(
         #    logits, size=(H, W), mode="bilinear", align_corners=False
         #)
@@ -402,21 +432,31 @@ def main():
             trainloader_remain_iter = iter(trainloader_remain)
             batch_remain = next(trainloader_remain_iter)
         
-        images_remain, _, _, _, _ = batch_remain
+        images_remain, _, _, names, _ = batch_remain
         images_remain = Variable(images_remain).cuda(args.gpu)
         
         pred_remain = interp(model(images_remain))
-             
+         
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
         #print (pred_remain.size(), images_remain.size())
         pred_cat = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
-          
         D_out_z, D_out_y_pred = model_D(pred_cat) # predicts the D ouput 0-1 and feature map for FM-loss 
   
-        # find predicted segmentation maps above threshold 
-        pred_sel, labels_sel, count = find_good_maps(D_out_z, pred_remain) 
-
+        # find predicted segmentation maps above threshold
+        pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain) 
+        
+        # save the labels above threshold
+       
+        if labels_sel.size(0)!=0:
+            for i in range(len(count)):
+                index = indexes[i]
+                name = names[index]
+                gen_viz = labels_sel[i] 
+                #label_selected = labels_sel(i,:,:) 
+                filename = os.path.join(generator_viz_dir, name + ".npy")
+                np.save(filename, gen_viz.cpu().numpy())
+  
         # training loss on above threshold segmentation predictions (Cross Entropy Loss)
         if count > 0 and i_iter > 0:
             loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
@@ -482,14 +522,14 @@ def main():
 
         if i_iter >= args.num_steps-1:
             print ('save model ...')
-            torch.save(model.state_dict(),os.path.join(args.checkpoint_dir, 'VOC_'+str(args.num_steps)+'.pth'))
-            torch.save(model_D.state_dict(),os.path.join(args.checkpoint_dir, 'VOC_'+str(args.num_steps)+'_D.pth'))
+            torch.save(model.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
+            torch.save(model_D.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter!=0:
             print ('saving checkpoint  ...')
-            torch.save(model.state_dict(),os.path.join(args.checkpoint_dir, 'VOC_'+str(i_iter)+'.pth'))
-            torch.save(model_D.state_dict(),os.path.join(args.checkpoint_dir, 'VOC_'+str(i_iter)+'_D.pth'))
+            torch.save(model.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'.pth'))
+            torch.save(model_D.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
 
     end = timeit.default_timer()
     print (end-start,'seconds')
