@@ -18,7 +18,7 @@ from torch.utils import data, model_zoo
 from torch.autograd import Variable
 import torchvision.transforms as transform
 from tensorboardX import SummaryWriter
-
+from torchnet.meter import MovingAverageValueMeter
 #from model.deeplabv2 import Res_Deeplab
 #from model.deeplabv3p import Res_Deeplab 
 from model import *
@@ -68,6 +68,7 @@ EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscap
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
 EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
+
 def get_arguments():
     """Parse all the arguments provided from the CLI.
 
@@ -129,15 +130,27 @@ def get_arguments():
                         help="Save summaries and checkpoint every often.")
     parser.add_argument("--weight-decay", type=float, default=WEIGHT_DECAY,
                         help="Regularisation parameter for L2-loss.")
-    parser.add_argument("--gpu", type=int, default=0,
+    parser.add_argument("--cuda", type=bool, default=True,
                         help="choose gpu device.")
     return parser.parse_args()
 
 args = get_arguments()
 
-def loss_calc(pred, label, gpu):
-    label = Variable(label.long()).cuda(gpu)
-    criterion = CrossEntropy2d(ignore_label=args.ignore_label).cuda(gpu)  # Ignore label ??
+def get_device(cuda):
+    cuda = cuda and torch.cuda.is_available()
+    print(torch.cuda.is_available(), 'cuda available')
+    device = torch.device("cuda" if cuda else "cpu")
+    if cuda:
+        print("Device:")
+        for i in range(torch.cuda.device_count()):
+            print("    {}:".format(i), torch.cuda.get_device_name(i))
+    else:
+        print("Device: CPU")
+    return device
+
+def loss_calc(pred, label, device):
+    label = Variable(label.long()).to(device)
+    criterion = CrossEntropy2d(ignore_label=args.ignore_label).to(device)  # Ignore label ??
     return criterion(pred, label)
 
 def lr_poly(base_lr, iter, max_iter, power):
@@ -174,7 +187,7 @@ def makedirs(dirs):
     if not os.path.exists(dirs):
         os.makedirs(dirs)
      
-def find_good_maps(D_outs, pred_all):
+def find_good_maps(D_outs, pred_all, device):
     count = 0
     indexes=[]
     for i in range(D_outs.size(0)):
@@ -194,7 +207,7 @@ def find_good_maps(D_outs, pred_all):
                 pred_sel[num_sel] = pred_all[j]
                 label_sel[num_sel] = compute_argmax_map(pred_all[j])
                 num_sel +=1
-        return  pred_sel.cuda(), label_sel.cuda(), count, indexes
+        return  pred_sel.to(device), label_sel.to(device), count, indexes
     else:
         return torch.Tensor(), torch.Tensor(), count, indexes 
 
@@ -228,8 +241,8 @@ def main():
     input_size = (h, w)
 
     cudnn.enabled = True
-    gpu = args.gpu
-
+    cuda = args.cuda
+    device = get_device(cuda)
     # create network
     #model = Res_Deeplab(num_classes=args.num_classes)
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
@@ -243,18 +256,19 @@ def main():
     model.load_state_dict(new_params)
     
     model  = nn.DataParallel(model)
+    model = model.to(device)
     model.train()
-    model.cuda(args.gpu)
+    #model.cuda(args.gpu)
 
     cudnn.benchmark = True
 
     # init D
     model_D = s4GAN_discriminator(num_classes=args.num_classes, dataset=args.dataset)
-
+    model_D = model_D.to(device)
     if args.restore_from_D is not None:
         model_D.load_state_dict(torch.load(args.restore_from_D))
     model_D.train()
-    model_D.cuda(args.gpu)
+    #model_D.cuda(args.gpu)
 
     if args.dataset == 'pascal_voc':    
         train_dataset = VOCDataSet(args.data_dir, args.data_list, crop_size=input_size,
@@ -362,11 +376,11 @@ def main():
     pred_label = 0
     gt_label = 1
 
-    y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).cuda()), Variable(torch.zeros(args.batch_size, 1).cuda())
+    y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).to(device)), Variable(torch.zeros(args.batch_size, 1).to(device))
 
     # Setup loss logger
     writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
-    #average_loss = MovingAverageValueMeter(SOLVER.AVERAGE_LOSS)
+    average_loss = MovingAverageValueMeter(20)
 
     # Path to save models
     checkpoint_dir = os.path.join(
@@ -415,7 +429,8 @@ def main():
             batch = next(trainloader_iter)
 
         images, labels, _, _, _ = batch
-        images = Variable(images).cuda(args.gpu)
+        #images = Variable(images).cuda(args.gpu)
+        images = Variable(images).to(device)
         pred = interp(model(images))
        
         #import pdb
@@ -424,7 +439,8 @@ def main():
         #    logits, size=(H, W), mode="bilinear", align_corners=False
         #)
         
-        loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
+        #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
+        loss_ce = loss_calc(pred, labels, device)
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
@@ -433,8 +449,9 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
-        images_remain = Variable(images_remain).cuda(args.gpu)
-        
+        #images_remain = Variable(images_remain).cuda(args.gpu)
+        images_remain = Variable(images_remain).to(device)
+
         pred_remain = interp(model(images_remain))
          
         # concatenate the prediction with the input images
@@ -444,7 +461,7 @@ def main():
         D_out_z, D_out_y_pred = model_D(pred_cat) # predicts the D ouput 0-1 and feature map for FM-loss 
   
         # find predicted segmentation maps above threshold
-        pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain) 
+        pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain, device) 
         
         # save the labels above threshold
        
@@ -459,7 +476,8 @@ def main():
   
         # training loss on above threshold segmentation predictions (Cross Entropy Loss)
         if count > 0 and i_iter > 0:
-            loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
+            #loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
+            loss_st = loss_calc(pred_sel, labels_sel, device)
         else:
             loss_st = 0.0
 
@@ -472,9 +490,10 @@ def main():
 
         images_gt, labels_gt, _, _, _ = batch_gt
         # Converts grounth truth segmentation into 'num_classes' segmentation maps. 
-        D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
+        #D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
+        D_gt_v = Variable(one_hot(labels_gt)).to(device)
                 
-        images_gt = images_gt.cuda()
+        images_gt = images_gt.to(device)
         images_gt = (images_gt - torch.min(images_gt))/(torch.max(images)-torch.min(images))
             
         D_gt_v_cat = torch.cat((D_gt_v, images_gt), dim=1)
@@ -502,12 +521,12 @@ def main():
         pred_cat = pred_cat.detach()  # detach does not allow the graddients to back propagate.
         
         D_out_z, _ = model_D(pred_cat)
-        y_fake_ = Variable(torch.zeros(D_out_z.size(0), 1).cuda())
+        y_fake_ = Variable(torch.zeros(D_out_z.size(0), 1).to(device))
         loss_D_fake = criterion(D_out_z, y_fake_) 
 
         # train with gt
         D_out_z_gt , _ = model_D(D_gt_v_cat)
-        y_real_ = Variable(torch.ones(D_out_z_gt.size(0), 1).cuda()) 
+        y_real_ = Variable(torch.ones(D_out_z_gt.size(0), 1).to(device)) 
         loss_D_real = criterion(D_out_z_gt, y_real_)
         
         loss_D = (loss_D_fake + loss_D_real)/2.0
@@ -518,7 +537,28 @@ def main():
         optimizer_D.step()
         scheduler.step(epoch=i_iter)
 
-        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value))
+        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value)) 
+        
+        writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
+        for i, o in enumerate(optimizer.param_groups):
+            writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
+        for i in range(torch.cuda.device_count()):
+            writer.add_scalar(
+            "gpu/device_{}/memory_cached".format(i),
+        torch.cuda.memory_cached(i) / 1024 ** 3,
+        i_iter,
+        )
+
+        for name, param in model.module.base.named_parameters():
+            
+            name = name.replace(".", "/")
+  
+            # Weight/gradient distribution
+            writer.add_histogram(name, param, i_iter, bins="auto")
+            if param.requires_grad:
+                writer.add_histogram(
+                    name + "/grad", param.grad, i_iter, bins="auto"
+                    )
 
         if i_iter >= args.num_steps-1:
             print ('save model ...')
