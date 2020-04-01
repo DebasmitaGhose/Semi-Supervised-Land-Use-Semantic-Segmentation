@@ -7,7 +7,7 @@ import sys
 from collections import OrderedDict
 import os
 import pdb
-
+import json
 import torch
 import torch.nn as nn
 from torch.autograd import Variable
@@ -38,7 +38,8 @@ NUM_CLASSES = 21 # 60 for pascal context
 RESTORE_FROM = ''
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
-
+EXP_ID = "default"
+EXP_OUTPUT_DIR = './s4gan_files'
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -47,6 +48,12 @@ def get_arguments():
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="VOC evaluation script")
+    parser.add_argument("--dataset-split", type=str, default="test",
+                        help="train,val,test,subset")
+    parser.add_argument("--exp-id", type=str, default=EXP_ID,
+                        help= "unique id to identify all files of an experiment")
+    parser.add_argument("--check-epoch", type=int, default=10,
+                        help="epoch to evaluate the model at")
     parser.add_argument("--model", type=str, default=MODEL,
                         help="available options : DeepLab/DRN")
     parser.add_argument("--dataset", type=str, default=DATASET,
@@ -70,6 +77,10 @@ def get_arguments():
     parser.add_argument("--save-output-images", action="store_true",
                         help="save output images")
     return parser.parse_args()
+
+def makedirs(dirs):
+    if not os.path.exists(dirs):
+        os.makedirs(dirs)
 
 
 class VOCColorize(object):
@@ -137,12 +148,12 @@ def get_iou(args, data_list, class_num, save_path=None):
     m_list = pool.map(f, data_list)
     pool.close() 
     pool.join() 
-    print(len(m_list[0]))  
+    #print(len(m_list[0]))  
     for m in m_list:
         ConfM.addM(m)
 
     aveJ, j_list, M = ConfM.jaccard()
-    print(j_list)
+    #print(j_list)
 
     if args.dataset == 'pascal_voc':
         classes = np.array(('background',  # always index 0
@@ -190,7 +201,10 @@ def main():
     if args.restore_from[:4] == 'http' :
         saved_state_dict = model_zoo.load_url(args.restore_from)
     else:
-        saved_state_dict = torch.load(args.restore_from)
+        #saved_state_dict = torch.load(args.restore_from)
+        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
+        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'))
+    #print("Restoring from: ", saved_state_dict)
     model.load_state_dict(saved_state_dict)
 
     model.eval()
@@ -251,32 +265,47 @@ def main():
         
         output = output.transpose(1,2,0)
         output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
-       
+
+        viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
+        
+        if not os.path.exists(viz_dir):
+            makedirs(viz_dir)
+        print("Visualization dst:", viz_dir)
+        
         if args.save_output_images:
             if args.dataset == 'pascal_voc':
-                filename = os.path.join(args.save_dir, '{}.png'.format(name[0]))
+                filename = '{}.png'.format(name[0])
                 color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-                color_file.save(filename)
-            elif args.dataset == 'pascal_context':
-                filename = os.path.join(args.save_dir, filename[0])
-                scipy.misc.imsave(filename, gt)
+                color_file.save(viz_dir+filename)
+            #elif args.dataset == 'pascal_context':
+            #    filename = os.path.join(args.save_dir, filename[0])
+            #    scipy.misc.imsave(filename, gt)
         
         data_list.append([gt.flatten(), output.flatten()])
         gt_list.append(gt)
         output_list.append(output)
         #score = scores(data_list[0], output.flatten(), args.num_classes)
         #print(score)
-    print(np.shape(data_list[0][:]),'data list')
-    filename = os.path.join(args.save_dir, 'result.txt')
+    #print(np.shape(data_list[0][:]),'data list')
+    scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
+    if not os.path.exists(scores_dir):
+        makedirs(scores_dir)
+    scores_filename = os.path.join(scores_dir, "scores.json")
+    print("Scores saved at: ",scores_filename)
+
+    
+
         #get_iou(args, data_list, args.num_classes, filename)
-    print(np.shape(gt), 'gt')
-    print(gt==output, 'gt')
-    print(np.shape(output), 'output')
-    print(output, 'output')
-    print(np.shape(gt_list[0]), 'gt list')
-    print(np.shape(output_list[0]), 'output list')
+    #print(np.shape(gt), 'gt')
+    #print(gt==output, 'gt')
+    #print(np.shape(output), 'output')
+    #print(output, 'output')
+    #print(np.shape(gt_list[0]), 'gt list')
+    #print(np.shape(output_list[0]), 'output list')
     score = scores(gt_list, output_list, args.num_classes)
-    print(score)
+    #print(score)
+    with open(scores_filename, "w") as f:
+        json.dump(score, f, indent=4, sort_keys=True)
 
 
 if __name__ == '__main__':

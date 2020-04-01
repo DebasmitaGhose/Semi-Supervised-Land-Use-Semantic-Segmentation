@@ -248,7 +248,7 @@ def main():
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
     # load pretrained parameters
     saved_state_dict = torch.load(args.restore_from)
-    
+        
     new_params = model.state_dict().copy()
     for name, param in new_params.items():
         if name in saved_state_dict and param.size() == saved_state_dict[name].size():
@@ -264,9 +264,10 @@ def main():
 
     # init D
     model_D = s4GAN_discriminator(num_classes=args.num_classes, dataset=args.dataset)
-    model_D = model_D.to(device)
     if args.restore_from_D is not None:
         model_D.load_state_dict(torch.load(args.restore_from_D))
+    model_D  = nn.DataParallel(model_D)
+    model_D = model_D.to(device) 
     model_D.train()
     #model_D.cuda(args.gpu)
 
@@ -562,14 +563,14 @@ def main():
 
         if i_iter >= args.num_steps-1:
             print ('save model ...')
-            torch.save(model.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
-            torch.save(model_D.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
+            torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
+            torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter!=0:
             print ('saving checkpoint  ...')
-            torch.save(model.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'.pth'))
-            torch.save(model_D.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
+            torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'.pth'))
+            torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
 
     end = timeit.default_timer()
     print (end-start,'seconds')

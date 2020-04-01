@@ -64,6 +64,6 @@ if __name__ == "__main__":
     model.eval()
     image = torch.randn(1, 3, 513, 513)
 
-    print(model)
+    #print(model)
     print("input:", image.shape)
     print("output:", model(image).shape)
