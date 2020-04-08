@@ -33,7 +33,7 @@ from utils.lr_scheduler import PolynomialLR
 start = timeit.default_timer()
 
 DATA_DIRECTORY = '/home/amth_dg777/project/VOCdevkit/VOC2012'
-DATA_LIST_PATH = '/home/amth_dg777/project/VOCdevkit/VOC2012/ImageSets/Segmentation/subset.txt'
+DATA_LIST_PATH = '/home/amth_dg777/project/VOCdevkit/VOC2012/ImageSets/Segmentation/train.txt' #subset.txt
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 NUM_CLASSES = 21 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
@@ -62,7 +62,7 @@ RANDOM_SEED = 1234
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
-THRESHOLD_ST = 0.6
+THRESHOLD_ST = 0.6 #0.6
 EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
@@ -467,7 +467,7 @@ def main():
         # save the labels above threshold
        
         if labels_sel.size(0)!=0:
-            for i in range(len(count)):
+            for i in range(count):
                 index = indexes[i]
                 name = names[index]
                 gen_viz = labels_sel[i] 

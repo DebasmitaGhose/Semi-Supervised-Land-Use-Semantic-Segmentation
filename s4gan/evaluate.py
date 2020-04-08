@@ -32,7 +32,7 @@ DATASET = 'pascal_voc' # pascal_context
 
 MODEL = 'deeplabv2' # deeeplabv2, deeplabv3p
 DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
-DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/subset.txt'
+DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/train.txt' # subset.txt
 IGNORE_LABEL = 255
 NUM_CLASSES = 21 # 60 for pascal context
 RESTORE_FROM = ''
@@ -276,7 +276,7 @@ def main():
             if args.dataset == 'pascal_voc':
                 filename = '{}.png'.format(name[0])
                 color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-                color_file.save(viz_dir+filename)
+                color_file.save(os.path.join(viz_dir, filename))
             #elif args.dataset == 'pascal_context':
             #    filename = os.path.join(args.save_dir, filename[0])
             #    scipy.misc.imsave(filename, gt)
