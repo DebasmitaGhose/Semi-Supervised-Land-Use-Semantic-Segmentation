@@ -130,8 +130,6 @@ def ucm_color_map():
         return np.asarray([[0, 0, 0], [166, 202, 240], [128, 128, 0], [0, 0, 128],
                            [255, 0, 0], [0, 128, 0], [128, 0, 0], [255, 233, 233],
                            [160, 160, 164], [0, 128, 128], [90, 87, 255], [255, 255, 0],
-An image object.
-
                            [255, 192, 0], [0, 0, 255], [255, 0, 192], [128, 0, 128],
                            [0, 255, 0], [0, 255, 255]])
 
@@ -190,11 +188,7 @@ def get_iou(args, data_list, class_num, save_path=None):
     if args.dataset == 'pascal_voc':
         classes = np.array(('background',  # always index 0
             'aeroplane', 'bicycle', 'bird', 'boat',
-            'bottle', 'bus', 'car', 'cat', 'chair',n image object.
-
-An image object.
-
-
+            'bottle', 'bus', 'car', 'cat', 'chair',
             'cow', 'diningtable', 'dog', 'horse',
             'motorbike', 'person', 'pottedplant',
             'sheep', 'sofa', 'train', 'tvmonitor'))
