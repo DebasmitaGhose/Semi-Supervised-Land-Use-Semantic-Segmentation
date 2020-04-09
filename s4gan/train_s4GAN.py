@@ -269,6 +269,7 @@ def main():
     model_D = s4GAN_discriminator(num_classes=args.num_classes, dataset=args.dataset)
     if args.restore_from_D is not None:
         model_D.load_state_dict(torch.load(args.restore_from_D))
+    model_D = nn.DataParallel(model_D)
     model_D = model_D.to(device) 
     model_D.train()
     #model_D.cuda(args.gpu)

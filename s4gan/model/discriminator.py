@@ -5,7 +5,7 @@ class s4GAN_discriminator(nn.Module):
 
     def __init__(self, num_classes, dataset, ndf = 64):
         super(s4GAN_discriminator, self).__init__()
-
+        #print(dataset, 'in discriminator')
         self.conv1 = nn.Conv2d(num_classes+3, ndf, kernel_size=4, stride=2, padding=1) # 160 x 160
         self.conv2 = nn.Conv2d(  ndf, ndf*2, kernel_size=4, stride=2, padding=1) # 80 x 80
         self.conv3 = nn.Conv2d(ndf*2, ndf*4, kernel_size=4, stride=2, padding=1) # 40 x 40
@@ -14,6 +14,8 @@ class s4GAN_discriminator(nn.Module):
             self.avgpool = nn.AvgPool2d((20, 20))
         elif dataset == 'cityscapes':
             self.avgpool = nn.AvgPool2d((16, 32))
+        elif dataset == 'ucm':
+            self.avgpool = nn.AvgPool2d((20, 20))
         self.fc = nn.Linear(ndf*8, 1)
         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
         self.drop = nn.Dropout2d(0.5)
