@@ -29,13 +29,13 @@ import scipy.misc
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 
-DATASET = 'pascal_voc' # pascal_context
+DATASET = 'ucm' # pascal_context
 
 MODEL = 'deeplabv2' # deeeplabv2, deeplabv3p
-DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
-DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/train.txt' # subset.txt
+DATA_DIRECTORY = '../../Sattelite_Images/'
+DATA_LIST_PATH = '../../Sattelite_Images/ImageSets/test.txt' # subset.txt
 IGNORE_LABEL = 255
-NUM_CLASSES = 21 # 60 for pascal context
+NUM_CLASSES = 18 # 60 for pascal context
 RESTORE_FROM = ''
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
@@ -105,6 +105,37 @@ class VOCColorize(object):
 
         return color_image
 
+def UCMColorize(label_mask, save_file):
+        label_colours = ucm_color_map()
+        r = label_mask.copy()
+        g = label_mask.copy()
+        b = label_mask.copy()
+        for ll in range(0, 18):
+            r[label_mask == ll] = label_colours[ll, 0]
+            g[label_mask == ll] = label_colours[ll, 1]
+            b[label_mask == ll] = label_colours[ll, 2]
+        rgb = np.zeros((label_mask.shape[0], label_mask.shape[1], 3))
+        rgb[:, :, 0] = b #r
+        rgb[:, :, 1] = g #g 
+        rgb[:, :, 2] = r #b 
+        #print(rgb.shape, 'rgb')
+        print(save_file)
+       	#plt.imshow(rgb)
+        #plt.savefig(save_file)
+        cv2.imwrite(save_file, rgb)
+
+        return rgb
+
+def ucm_color_map():
+        return np.asarray([[0, 0, 0], [166, 202, 240], [128, 128, 0], [0, 0, 128],
+                           [255, 0, 0], [0, 128, 0], [128, 0, 0], [255, 233, 233],
+                           [160, 160, 164], [0, 128, 128], [90, 87, 255], [255, 255, 0],
+An image object.
+
+                           [255, 192, 0], [0, 0, 255], [255, 0, 192], [128, 0, 128],
+                           [0, 255, 0], [0, 255, 255]])
+
+
 def color_map(N=256, normalized=False):
     def bitget(byteval, idx):
         return ((byteval & (1 << idx)) != 0)
@@ -159,7 +190,11 @@ def get_iou(args, data_list, class_num, save_path=None):
     if args.dataset == 'pascal_voc':
         classes = np.array(('background',  # always index 0
             'aeroplane', 'bicycle', 'bird', 'boat',
-            'bottle', 'bus', 'car', 'cat', 'chair',
+            'bottle', 'bus', 'car', 'cat', 'chair',n image object.
+
+An image object.
+
+
             'cow', 'diningtable', 'dog', 'horse',
             'motorbike', 'person', 'pottedplant',
             'sheep', 'sofa', 'train', 'tvmonitor'))
@@ -175,6 +210,14 @@ def get_iou(args, data_list, class_num, save_path=None):
             "terrain", "sky", "person", "rider",
             "car", "truck", "bus",
             "train", "motorcycle", "bicycle")) 
+    elif args.dataset == 'ucm':
+        classes = np.array(('background',  # always index 0
+            'airplane', 'bare_soil', 'buildings', 'cars',
+            'chapparal', 'court', 'dock', 'field', 'grass',
+            'mobile_home', 'pavement', 'sand', 'sea',
+            'ship', 'tanks', 'trees',
+            'water'))
+
 
     for i, iou in enumerate(j_list):
         print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
@@ -242,8 +285,9 @@ def main():
     data_list = []
     gt_list = []
     output_list = []
-    colorize = VOCColorize()
-   
+    #colorize = VOCColorize()
+    #colorize = UCMColorize()
+
     if args.with_mlmt:
         mlmt_preds = np.loadtxt('mlmt_output/output_ema_p_1_0_voc_5.txt', dtype = float) # best mt 0.05
 
@@ -283,10 +327,13 @@ def main():
         print("Visualization dst:", viz_dir)
         
         if args.save_output_images:
-            if args.dataset == 'pascal_voc' || args.dataset == 'ucm':
+            if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
                 filename = '{}.png'.format(name[0])
-                color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-                color_file.save(os.path.join(viz_dir, filename))
+                #print(type(output), "output in visualize")
+                #color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
+                savefile = os.path.join(viz_dir, filename)
+                color_file = UCMColorize(output, savefile)
+                #color_file.save(os.path.join(viz_dir, filename))
             #elif args.dataset == 'pascal_context':
             #    filename = os.path.join(args.save_dir, filename[0])
             #    scipy.misc.imsave(filename, gt)
