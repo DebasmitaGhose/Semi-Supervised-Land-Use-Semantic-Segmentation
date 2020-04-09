@@ -32,7 +32,7 @@ DATASET = 'pascal_voc' # pascal_context
 
 MODEL = 'deeplabv2' # deeeplabv2, deeplabv3p
 DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
-DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/subset.txt'
+DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/val.txt'
 IGNORE_LABEL = 255
 NUM_CLASSES = 21 # 60 for pascal context
 RESTORE_FROM = ''
