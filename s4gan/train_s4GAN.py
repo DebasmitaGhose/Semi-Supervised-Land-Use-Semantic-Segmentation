@@ -26,18 +26,19 @@ from model import *
 
 from model.discriminator import s4GAN_discriminator
 from utils.loss import CrossEntropy2d
-from data.voc_dataset import VOCDataSet, VOCGTDataSet
+from data.voc_dataset import VOCDataSet, VOCGTDataSet # modify this
+from data.ucm_dataset import UCMDataSet
 from data import get_loader, get_data_path
 from data.augmentations import *
 from utils.lr_scheduler import PolynomialLR
 start = timeit.default_timer()
 
-DATA_DIRECTORY = '/home/amth_dg777/project/VOCdevkit/VOC2012'
-DATA_LIST_PATH = '/home/amth_dg777/project/VOCdevkit/VOC2012/ImageSets/Segmentation/train.txt' #subset.txt
+DATA_DIRECTORY = '/home/amth_dg777/project/Satellite_Images'
+DATA_LIST_PATH = '/home/amth_dg777/project/Satellite_Images/ImageSets/train.txt' #subset.txt
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
-NUM_CLASSES = 21 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
-DATASET = 'pascal_voc' #pascal_voc or pascal_context 
+NUM_CLASSES = 17 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
+DATASET = 'ucm'#'pascal_voc' #pascal_voc or pascal_context 
 
 
 MODEL = 'DeepLab'
@@ -246,8 +247,10 @@ def main():
     # create network
     #model = Res_Deeplab(num_classes=args.num_classes)
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
+    #print(model)
     # load pretrained parameters
     saved_state_dict = torch.load(args.restore_from)
+    #print(saved_state_dict)
         
     new_params = model.state_dict().copy()
     for name, param in new_params.items():
@@ -266,7 +269,6 @@ def main():
     model_D = s4GAN_discriminator(num_classes=args.num_classes, dataset=args.dataset)
     if args.restore_from_D is not None:
         model_D.load_state_dict(torch.load(args.restore_from_D))
-    model_D  = nn.DataParallel(model_D)
     model_D = model_D.to(device) 
     model_D.train()
     #model_D.cuda(args.gpu)
@@ -276,6 +278,9 @@ def main():
                         scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
         #train_gt_dataset = VOCGTDataSet(args.data_dir, args.data_list, crop_size=input_size,
                         #scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
+    elif args.dataset == 'ucm':
+        train_dataset = UCMDataSet(args.data_dir, args.data_list, crop_size=input_size,
+                        scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
 
     elif args.dataset == 'pascal_context':
         input_transform = transform.Compose([transform.ToTensor(),
@@ -295,7 +300,7 @@ def main():
         #train_gt_dataset = data_loader( data_path, is_transform=True, augmentations=data_aug) 
 
     train_dataset_size = len(train_dataset)
-    #print ('dataset size: ', train_dataset_size)
+    print ('dataset size: ', train_dataset_size)
 
     if args.labeled_ratio is None:
         trainloader = data.DataLoader(train_dataset,
@@ -310,8 +315,9 @@ def main():
 
     else:
         partial_size = int(args.labeled_ratio * train_dataset_size)
-        
+        print(partial_size, "partial size")        
         train_ids = np.arange(train_dataset_size)
+        print(train_ids, "train ids")
         np.random.shuffle(train_ids)
        
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -326,7 +332,7 @@ def main():
                         batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=0, pin_memory=True)
 
         trainloader_remain_iter = iter(trainloader_remain)
-
+        #print(next(trainloader_remain_iter))
     trainloader_iter = iter(trainloader)
     trainloader_gt_iter = iter(trainloader_gt)
 
@@ -433,8 +439,8 @@ def main():
         #images = Variable(images).cuda(args.gpu)
         images = Variable(images).to(device)
         pred = interp(model(images))
-       
-        #import pdb
+        #print(images, "images")   
+        import pdb
         #pdb.set_trace()
         #logits = F.interpolate(
         #    logits, size=(H, W), mode="bilinear", align_corners=False
@@ -442,14 +448,24 @@ def main():
         
         #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
         loss_ce = loss_calc(pred, labels, device)
+        #print(loss_ce, "loss_ce")
+        print(pred.shape, "pred")
+        print(labels.shape, "labels")
+       
+         
+        #print(next(trainloader_remain_iter))
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
         except:
             trainloader_remain_iter = iter(trainloader_remain)
+            print(next(trainloader_remain_iter), "trainloader remain iter")
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
+        print(images_remain.shape, "images remain")
+        print(device, "device")
+        #print(Variable(images_remain))
         #images_remain = Variable(images_remain).cuda(args.gpu)
         images_remain = Variable(images_remain).to(device)
 
@@ -475,7 +491,8 @@ def main():
                 filename = os.path.join(generator_viz_dir, name + ".npy")
                 np.save(filename, gen_viz.cpu().numpy())
   
-        # training loss on above threshold segmentation predictions (Cross Entropy Loss)
+        # training loss on above threshold segmentation predictions (Cross Entropy Loss)IN: 321
+
         if count > 0 and i_iter > 0:
             #loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
             loss_st = loss_calc(pred_sel, labels_sel, device)

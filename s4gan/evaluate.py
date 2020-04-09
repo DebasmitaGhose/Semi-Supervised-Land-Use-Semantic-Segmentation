@@ -19,6 +19,7 @@ from utils.metric import scores
 from model import *
 #from model.deeplabv3p import Res_Deeplab
 from data.voc_dataset import VOCDataSet
+from data.ucm_dataset import UCMDataSet
 from data import get_data_path, get_loader
 import torchvision.transforms as transform
 
@@ -215,6 +216,12 @@ def main():
                                     batch_size=1, shuffle=False, pin_memory=True)
         interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
+    elif args.dataset == 'ucm':
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False),
+                                    batch_size=1, shuffle=False, pin_memory=True)
+        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+
+
     elif args.dataset == 'pascal_context':
         input_transform = transform.Compose([transform.ToTensor(),
                 transform.Normalize([.485, .456, .406], [.229, .224, .225])])
@@ -254,6 +261,9 @@ def main():
         if args.dataset == 'pascal_voc':
             output = output[:,:size[0],:size[1]]
             gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
+        elif args.dataset == 'ucm':
+            output = output[:,:size[0],:size[1]]
+            gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
         elif args.dataset == 'pascal_context':
             gt = np.asarray(label[0].numpy(), dtype=np.int)
         elif args.dataset == 'cityscapes':
@@ -273,7 +283,7 @@ def main():
         print("Visualization dst:", viz_dir)
         
         if args.save_output_images:
-            if args.dataset == 'pascal_voc':
+            if args.dataset == 'pascal_voc' || args.dataset == 'ucm':
                 filename = '{}.png'.format(name[0])
                 color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
                 color_file.save(os.path.join(viz_dir, filename))
