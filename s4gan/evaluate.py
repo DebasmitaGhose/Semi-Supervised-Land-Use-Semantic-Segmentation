@@ -276,7 +276,7 @@ def main():
             if args.dataset == 'pascal_voc':
                 filename = '{}.png'.format(name[0])
                 color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-                color_file.save(viz_dir+filename)
+                color_file.save(os.path.join(viz_dir, filename))
             #elif args.dataset == 'pascal_context':
             #    filename = os.path.join(args.save_dir, filename[0])
             #    scipy.misc.imsave(filename, gt)
