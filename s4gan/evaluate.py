@@ -188,7 +188,7 @@ def get_iou(args, data_list, class_num, save_path=None):
 def main():
     """Create the model and start the evaluation process."""
 
-    ags = get_arguments()
+    args = get_arguments()
     gpu0 = args.gpu
 
     if not os.path.exists(args.save_dir):
