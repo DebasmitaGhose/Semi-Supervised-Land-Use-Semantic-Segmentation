@@ -241,18 +241,22 @@ def crf_process(image, label, logit, size, postprocessor):
         logit = torch.FloatTensor(logit)[None, None, ...]
         #print(logit.shape, "logit inside crf_process")
         logit = F.interpolate(logit, size=(H, W), mode="bilinear", align_corners=False)
-        prob = F.softmax(logit, dim=1)[0].numpy()
-        #print(image.shape, "image")
+        #print(logit, "logit")
+        #logit = torch.squeeze(logit, 0)
+        #print(logit.shape, "logit")
+        prob = F.softmax(logit, dim=2)[0].numpy()
+        
+        #print(F.softmax(logit, dim=2).shape, "prob") # dim = 1
         image = torch.squeeze(image)
-        #print(prob.shape, "prob")
+        print(prob, "prob")
         image = image.numpy()
         #print(image.shape, "image passed to postprocessor")
         image = image.astype(np.uint8).transpose(1, 2, 0)
         #print(image.shape, "image passed to postprocessor")
         #print(image, "image")
-        prob = postprocessor(image, prob)
-        #print(prob, "probs")
-        crf_output = np.argmax(prob, axis=0)
+        prob_post = postprocessor(image, prob)
+        #print(prob_post, "prob_post")
+        crf_output = np.argmax(prob_post, axis=0)
 
         return crf_output
 
@@ -287,9 +291,13 @@ def main():
         interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
     elif args.dataset == 'ucm':
-        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(320,240), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
+        interp = nn.Upsample(size=(320,240), mode='bilinear', align_corners=True) #320, 240
+        if args.crf:
+            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
+                                        batch_size=1, shuffle=False, pin_memory=True)
+            interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
 
 
     elif args.dataset == 'pascal_context':
@@ -391,7 +399,8 @@ def main():
 
         gt_list.append(gt)
         output_list.append(output)
-        crf_result_list.append(result_crf)
+        if args.crf:
+            crf_result_list.append(result_crf)
         #score = scores(data_list[0], output.flatten(), args.num_classes)
         #print(score)
     #print(np.shape(data_list[0][:]),'data list')
