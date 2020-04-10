@@ -25,7 +25,7 @@ import torchvision.transforms as transform
 
 from PIL import Image
 import scipy.misc
-
+from utils.crf import DenseCRF
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 
@@ -41,6 +41,15 @@ PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 EXP_ID = "default"
 EXP_OUTPUT_DIR = './s4gan_files'
+
+
+######### CRF ################
+CRF_ITER_MAX = 10 
+CRF_POS_XY_STD = 1
+CRF_POS_W = 3
+CRF_BI_XY_STD = 1
+CRF_BI_RGB_STD = 67
+CRF_BI_W = 4
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -77,6 +86,8 @@ def get_arguments():
                         help="combine with Multi-Label Mean Teacher branch")
     parser.add_argument("--save-output-images", action="store_true",
                         help="save output images")
+    parser.add_argument("--crf", action="store_true",
+                        help="apply crf postprocessing to precomputed logits")
     return parser.parse_args()
 
 def makedirs(dirs):
@@ -223,6 +234,28 @@ def get_iou(args, data_list, class_num, save_path=None):
                 f.write('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]) + '\n')
             f.write('meanIOU: ' + str(aveJ) + '\n')
 
+def crf_process(image, label, logit, size, postprocessor):
+        H = size[0]
+        W = size[1]
+        #print(logit.shape, "before")
+        logit = torch.FloatTensor(logit)[None, None, ...]
+        #print(logit.shape, "logit inside crf_process")
+        logit = F.interpolate(logit, size=(H, W), mode="bilinear", align_corners=False)
+        prob = F.softmax(logit, dim=1)[0].numpy()
+        #print(image.shape, "image")
+        image = torch.squeeze(image)
+        #print(prob.shape, "prob")
+        image = image.numpy()
+        #print(image.shape, "image passed to postprocessor")
+        image = image.astype(np.uint8).transpose(1, 2, 0)
+        #print(image.shape, "image passed to postprocessor")
+        #print(image, "image")
+        prob = postprocessor(image, prob)
+        #print(prob, "probs")
+        crf_output = np.argmax(prob, axis=0)
+
+        return crf_output
+
 def main():
     """Create the model and start the evaluation process."""
 
@@ -254,9 +287,9 @@ def main():
         interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
     elif args.dataset == 'ucm':
-        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False),
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+        interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
 
 
     elif args.dataset == 'pascal_context':
@@ -279,6 +312,7 @@ def main():
     data_list = []
     gt_list = []
     output_list = []
+    crf_result_list = []
     #colorize = VOCColorize()
     #colorize = UCMColorize()
 
@@ -292,6 +326,7 @@ def main():
         if index % 1 == 0:
             print('%d processd'%(index))
         image, label, size, name, _ = batch
+        #print(size, "size")
         size = size[0]
         output  = model(Variable(image, volatile=True).cuda(gpu0))
         output = interp(output).cpu().data[0].numpy()
@@ -315,11 +350,24 @@ def main():
         output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
 
         viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
-        
+        viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
+
         if not os.path.exists(viz_dir):
             makedirs(viz_dir)
+        if args.crf:
+            if not os.path.exists(viz_dir_crf):
+                makedirs(viz_dir_crf)
         print("Visualization dst:", viz_dir)
-        
+        if args.crf:
+            postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
+                                     pos_xy_std=CRF_POS_XY_STD,
+                                     pos_w=CRF_POS_W,
+                                     bi_xy_std=CRF_BI_XY_STD,
+                                     bi_rgb_std=CRF_BI_RGB_STD,
+                                     bi_w=CRF_BI_W,)
+            #print(postprocessor, "postprocessor")
+            result_crf = crf_process(image, label, output, size, postprocessor)
+            print(result_crf, "crf result")
         if args.save_output_images:
             if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
                 filename = '{}.png'.format(name[0])
@@ -330,11 +378,20 @@ def main():
                 #color_file.save(os.path.join(viz_dir, filename))
             #elif args.dataset == 'pascal_context':
             #    filename = os.path.join(args.save_dir, filename[0])
-            #    scipy.misc.imsave(filename, gt)
+            #    scipy.misc.imsave(filename, gt)i
+            print(output.shape, "output shape")
+            if args.crf:
+                filename = '{}.png'.format(name[0])
+                #print(type(output), "output in visualize")
+                #color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
+                savefile = os.path.join(viz_dir_crf, filename)
+                color_file = UCMColorize(result_crf, savefile)
         
         data_list.append([gt.flatten(), output.flatten()])
+
         gt_list.append(gt)
         output_list.append(output)
+        crf_result_list.append(result_crf)
         #score = scores(data_list[0], output.flatten(), args.num_classes)
         #print(score)
     #print(np.shape(data_list[0][:]),'data list')
@@ -344,6 +401,8 @@ def main():
     scores_filename = os.path.join(scores_dir, "scores.json")
     print("Scores saved at: ",scores_filename)
 
+    if args.crf:
+        scores_filename_crf = os.path.join(scores_dir, "scores_crf.json")
     
 
         #get_iou(args, data_list, args.num_classes, filename)
@@ -358,6 +417,15 @@ def main():
     with open(scores_filename, "w") as f:
         json.dump(score, f, indent=4, sort_keys=True)
 
+    if args.crf:
+        score_crf = scores(gt_list, crf_result_list, args.num_classes)
+    #print(score)
+        print("CRF Scores saved at: ",scores_filename_crf)
+
+        with open(scores_filename_crf, "w") as f:
+            json.dump(score_crf, f, indent=4, sort_keys=True)
+    
+        
 
 if __name__ == '__main__':
     main()
