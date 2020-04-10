@@ -467,7 +467,7 @@ def main():
         # save the labels above threshold
        
         if labels_sel.size(0)!=0:
-            for i in range(len(count)):
+            for i in range(count):
                 index = indexes[i]
                 name = names[index]
                 gen_viz = labels_sel[i] 

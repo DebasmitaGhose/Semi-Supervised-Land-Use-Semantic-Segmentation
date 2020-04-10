@@ -48,7 +48,8 @@ class VOCDataSet(data.Dataset):
         #print(index)
         datafiles = self.files[index]
         image = cv2.imread(datafiles["img"], cv2.IMREAD_COLOR)
-        label = cv2.imread(datafiles["label"], cv2.IMREAD_GRAYSCALE)
+        #label = cv2.imread(datafiles["label"], cv2.IMREAD_GRAYSCALE)
+        label = np.asarray(Image.open(datafiles["label"]), dtype=np.int32)
         size = image.shape
         name = datafiles["name"]
         if self.scale:
