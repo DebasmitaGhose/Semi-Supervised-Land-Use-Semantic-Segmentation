@@ -24,7 +24,7 @@ class DenseCRF(object):
         U = utils.unary_from_softmax(probmap)
         #print(U, "unary_from_softmax")
         U = np.ascontiguousarray(U)
-        print(U, "unary_from_softmax")
+        #print(U, "unary_from_softmax")
 
         image = np.ascontiguousarray(image)
 
@@ -36,9 +36,9 @@ class DenseCRF(object):
             sxy=self.bi_xy_std, srgb=self.bi_rgb_std, rgbim=image, compat=self.bi_w
         )
         #print(d, "DenseCRF2D")
-        print(np.array(d), "d")
+        #print(np.array(d), "d")
         Q = d.inference(self.iter_max)
-        print(np.array(Q), "Q")
+        #print(np.array(Q), "Q")
         Q = np.array(Q).reshape((C, H, W))
 
         return Q

@@ -238,17 +238,18 @@ def crf_process(image, label, logit, size, postprocessor):
         H = size[0]
         W = size[1]
         #print(logit.shape, "before")
-        logit = torch.FloatTensor(logit)[None, None, ...]
+        #logit = torch.FloatTensor(logit)#[None, ...]
+        #logit = torch.unsqueeze(logit,0)
         #print(logit.shape, "logit inside crf_process")
         logit = F.interpolate(logit, size=(H, W), mode="bilinear", align_corners=False)
         #print(logit, "logit")
         #logit = torch.squeeze(logit, 0)
         #print(logit.shape, "logit")
-        prob = F.softmax(logit, dim=2)[0].numpy()
+        prob = F.softmax(logit, dim=1)[0].cpu().numpy()
         
         #print(F.softmax(logit, dim=2).shape, "prob") # dim = 1
         image = torch.squeeze(image)
-        print(prob, "prob")
+        #print(prob, "prob")
         image = image.numpy()
         #print(image.shape, "image passed to postprocessor")
         image = image.astype(np.uint8).transpose(1, 2, 0)
@@ -256,9 +257,9 @@ def crf_process(image, label, logit, size, postprocessor):
         #print(image, "image")
         prob_post = postprocessor(image, prob)
         #print(prob_post, "prob_post")
-        crf_output = np.argmax(prob_post, axis=0)
+        crf_label = np.argmax(prob_post, axis=0)
 
-        return crf_output
+        return crf_label
 
 def main():
     """Create the model and start the evaluation process."""
@@ -337,8 +338,10 @@ def main():
         #print(size, "size")
         size = size[0]
         output  = model(Variable(image, volatile=True).cuda(gpu0))
+        crf_output = output.clone().detach()
+        #print(type(output))
         output = interp(output).cpu().data[0].numpy()
-
+        
         if args.dataset == 'pascal_voc':
             output = output[:,:size[0],:size[1]]
             gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
@@ -374,8 +377,8 @@ def main():
                                      bi_rgb_std=CRF_BI_RGB_STD,
                                      bi_w=CRF_BI_W,)
             #print(postprocessor, "postprocessor")
-            result_crf = crf_process(image, label, output, size, postprocessor)
-            print(result_crf, "crf result")
+            result_crf = crf_process(image, label, crf_output, size, postprocessor)
+            #print(result_crf, "crf result")
         if args.save_output_images:
             if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
                 filename = '{}.png'.format(name[0])
