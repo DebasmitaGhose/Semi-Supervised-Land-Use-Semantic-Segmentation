@@ -35,7 +35,7 @@ DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
 DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/val.txt'
 IGNORE_LABEL = 255
 NUM_CLASSES = 21 # 60 for pascal context
-RESTORE_FROM = ''
+RESTORE_FROM = './checkpoints/deeplabv2_resnet101_msc-vocaug-20000.pth'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 EXP_ID = "default"
@@ -200,6 +200,8 @@ def main():
 
     if args.restore_from[:4] == 'http' :
         saved_state_dict = model_zoo.load_url(args.restore_from)
+    elif EXP_ID  == "default" :
+        saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
     else:
         #saved_state_dict = torch.load(args.restore_from)
         print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
