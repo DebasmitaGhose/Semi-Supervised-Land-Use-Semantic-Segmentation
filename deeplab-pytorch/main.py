@@ -382,7 +382,7 @@ def test(config_path, model_path, cuda):
         # Forward propagation
         logits = model(images)
 
-        # Save on disk for CRF post-processing
+        # Save on disk for CRF post-processing.
         for image_id, logit in zip(image_ids, logits):
             filename = os.path.join(logit_dir, image_id + ".npy")
             np.save(filename, logit.cpu().numpy())

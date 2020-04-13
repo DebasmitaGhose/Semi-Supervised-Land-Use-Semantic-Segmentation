@@ -296,7 +296,7 @@ def main():
     elif args.dataset == 'ucm':
         testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240
+        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=False) #320, 240 # align_corners = True
         if args.crf:
             testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
                                         batch_size=1, shuffle=False, pin_memory=True)
