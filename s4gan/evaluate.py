@@ -32,11 +32,11 @@ IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 DATASET = 'ucm' # pascal_context
 
 MODEL = 'deeplabv2' # deeeplabv2, deeplabv3p
-DATA_DIRECTORY = '../../Sattelite_Images/'
-DATA_LIST_PATH = '../../Sattelite_Images/ImageSets/test.txt' # subset.txt
+DATA_DIRECTORY = '../../Satellite_Images/'
+DATA_LIST_PATH = '../../Satellite_Images/ImageSets/test.txt' # subset.txt
 IGNORE_LABEL = 255
 NUM_CLASSES = 18 # 60 for pascal context
-RESTORE_FROM = ''
+RESTORE_FROM = './checkpoints/ucm/checkpoint_final.pth'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 EXP_ID = "default"
@@ -276,6 +276,8 @@ def main():
 
     if args.restore_from[:4] == 'http' :
         saved_state_dict = model_zoo.load_url(args.restore_from)
+    elif EXP_ID == "default":
+        saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
     else:
         #saved_state_dict = torch.load(args.restore_from)
         print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
@@ -292,9 +294,9 @@ def main():
         interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
     elif args.dataset == 'ucm':
-        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(320,240), mean=IMG_MEAN, scale=False, mirror=False),
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(320,240), mode='bilinear', align_corners=True) #320, 240
+        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240
         if args.crf:
             testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
                                         batch_size=1, shuffle=False, pin_memory=True)

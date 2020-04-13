@@ -50,6 +50,7 @@ INPUT_SIZE = '321,321'
 IGNORE_LABEL = 255 # 255 for PASCAL-VOC / -1 for PASCAL-Context / 250 for Cityscapes
 
 RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'
+#RESTORE_FROM = './checkpoints/ucm/checkpoints_final.pth'
 #### DEFAULT VALUES USED FOR THESE######################################
 LEARNING_RATE = 2.5e-4
 LEARNING_RATE_D = 1e-4
