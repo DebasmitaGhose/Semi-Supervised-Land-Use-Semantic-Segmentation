@@ -215,7 +215,7 @@ def main():
     if args.dataset == 'pascal_voc':
         testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=False) # align corners = True
 
     elif args.dataset == 'pascal_context':
         input_transform = transform.Compose([transform.ToTensor(),
