@@ -88,6 +88,10 @@ def get_arguments():
                         help="save output images")
     parser.add_argument("--crf", action="store_true",
                         help="apply crf postprocessing to precomputed logits")
+    parser.add_argument("--labeled-ratio", type=float, default=None,
+                        help="labeled ratio of the trained model")
+    parser.add_argument("--threshold-st", type=float, default=None,
+                        help="threshold st of the trained model")
     return parser.parse_args()
 
 def makedirs(dirs):
@@ -278,6 +282,10 @@ def main():
         saved_state_dict = model_zoo.load_url(args.restore_from)
     elif EXP_ID == "default":
         saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
+    elif args.threshold_st is not None:
+        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.theshold_st) ,'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
+        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'))
+
     else:
         #saved_state_dict = torch.load(args.restore_from)
         print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
@@ -361,9 +369,12 @@ def main():
         
         output = output.transpose(1,2,0)
         output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
-
-        viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
-        viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
+        if args.labeled_ratio is not None:
+            viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
+            viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf", str(args.labeled_ratio), str(args.threshold_st))
+        else:
+            viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
+            viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
 
         if not os.path.exists(viz_dir):
             makedirs(viz_dir)
@@ -392,7 +403,7 @@ def main():
             #elif args.dataset == 'pascal_context':
             #    filename = os.path.join(args.save_dir, filename[0])
             #    scipy.misc.imsave(filename, gt)i
-            print(output.shape, "output shape")
+            #print(output.shape, "output shape")
             if args.crf:
                 filename = '{}.png'.format(name[0])
                 #print(type(output), "output in visualize")
@@ -409,7 +420,10 @@ def main():
         #score = scores(data_list[0], output.flatten(), args.num_classes)
         #print(score)
     #print(np.shape(data_list[0][:]),'data list')
-    scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
+    if args.labeled_ratio is not None:
+        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
+    else:
+        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
     if not os.path.exists(scores_dir):
         makedirs(scores_dir)
     scores_filename = os.path.join(scores_dir, "scores.json")
@@ -427,7 +441,7 @@ def main():
     #print(np.shape(gt_list[0]), 'gt list')
     #print(np.shape(output_list[0]), 'output list')
     score = scores(gt_list, output_list, args.num_classes)
-    #print(score)
+    print(score)
     with open(scores_filename, "w") as f:
         json.dump(score, f, indent=4, sort_keys=True)
 

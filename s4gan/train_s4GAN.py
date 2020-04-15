@@ -72,7 +72,9 @@ EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
 
 def get_arguments():
-    """Parse all the arguments provided from the CLI.
+    """Pt '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
+st '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
+rse all the arguments provided from the CLI.
 
     Returns:
       A list of parsed arguments.
@@ -396,7 +398,9 @@ def main():
         EXP_OUTPUT_DIR,
         "models",
         args.exp_id,
-        args.dataset_split
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
     )
     if not os.path.exists(checkpoint_dir):
         makedirs(checkpoint_dir)
@@ -406,7 +410,9 @@ def main():
         EXP_OUTPUT_DIR,
         "generator_viz",
         args.exp_id,
-        args.dataset_split
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
     )
     if not os.path.exists(generator_viz_dir):
         os.makedirs(generator_viz_dir)        
