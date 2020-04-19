@@ -319,9 +319,9 @@ def main():
 
     else:
         partial_size = int(args.labeled_ratio * train_dataset_size)
-        print(partial_size, "partial size")        
+        #print(partial_size, "partial size")        
         train_ids = np.arange(train_dataset_size)
-        print(train_ids, "train ids")
+        #print(train_ids, "train ids")
         np.random.shuffle(train_ids)
        
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -457,8 +457,8 @@ def main():
         #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
         loss_ce = loss_calc(pred, labels, device)
         #print(loss_ce, "loss_ce")
-        print(pred.shape, "pred")
-        print(labels.shape, "labels")
+        #print(pred.shape, "pred")
+        #print(labels.shape, "labels")
        
          
         #print(next(trainloader_remain_iter))
@@ -471,8 +471,8 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
-        print(images_remain.shape, "images remain")
-        print(device, "device")
+        #print(images_remain.shape, "images remain")
+        #print(device, "device")
         #print(Variable(images_remain))
         #images_remain = Variable(images_remain).cuda(args.gpu)
         images_remain = Variable(images_remain).to(device)
@@ -589,13 +589,13 @@ def main():
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
-            torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
+            #torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter!=0:
             print ('saving checkpoint  ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'.pth'))
-            torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
+            #torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
 
     end = timeit.default_timer()
     print (end-start,'seconds')
