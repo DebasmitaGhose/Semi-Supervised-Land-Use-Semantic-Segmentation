@@ -280,13 +280,16 @@ def main():
 
     if args.restore_from[:4] == 'http' :
         saved_state_dict = model_zoo.load_url(args.restore_from)
-    elif EXP_ID == "default":
-        saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
+    #elif EXP_ID == "default":
+    #    print("Restoring from default")
+    #    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
     elif args.threshold_st is not None:
-        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.theshold_st) ,'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
-        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'))
+        print("Loading new weights")
+        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
+        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(args.check_epoch)+'.pth'))
 
     else:
+        print("Loading old weights")
         #saved_state_dict = torch.load(args.restore_from)
         print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
         saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'))
@@ -304,7 +307,7 @@ def main():
     elif args.dataset == 'ucm':
         testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=False) #320, 240 # align_corners = True
+        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
         if args.crf:
             testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
                                         batch_size=1, shuffle=False, pin_memory=True)
