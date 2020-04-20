@@ -238,6 +238,31 @@ def get_params(model, key):
                 if isinstance(m[1], nn.Conv2d):
                     yield m[1].bias
 
+def find_checkpoint(checkpoint_dir):
+    checkpoint_D_list = []
+    checkpoint_S_list = []
+    for subdirs, dirs, files in os.walk(checkpoint_dir):
+        for i in files:
+            checkpoint = i.split('checkpoint')[1].split('.')[0]
+            if len(checkpoint.split('_'))!=1:
+                checkpoint_D = checkpoint.split('_')[0]
+                checkpoint_D_list.append(int(checkpoint_D))
+            else:
+                checkpoint_S = checkpoint
+                checkpoint_S_list.append(int(checkpoint_S))
+
+    max_S = max(checkpoint_S_list)
+    if checkpoint_D_list:
+        max_D = max(checkpoint_D_list)
+    else:
+        max_D = 0
+    if max_D == 0:
+        restore_flag = False
+    else:
+        restore_flag = True
+    return (min(max_S, max_D)), restore_flag
+
+
 def main():
     print (args)
 
@@ -250,10 +275,31 @@ def main():
     # create network
     #model = Res_Deeplab(num_classes=args.num_classes)
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
+    # Path to save models
+    checkpoint_dir = os.path.join(
+        EXP_OUTPUT_DIR,
+        "models",
+        args.exp_id,
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
+    )
+    if os.path.exists(checkpoint_dir):
+        restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
+        if restore_flag == True:
+            restore_model = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'.pth')
+            restore_model_D = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'_D.pth')
+            print("restoring from requeued point:", restore_iteration)
+        else:
+            restore_model = args.restore_from
+            restore_model_D = None
+            print("starting from scratch")
     #print(model)
     # load pretrained parameters
-    saved_state_dict = torch.load(args.restore_from)
+    saved_state_dict = torch.load(restore_model)
+    #saved_state_dict = torch.load(args.restore_from)
     #print(saved_state_dict)
+
         
     new_params = model.state_dict().copy()
     for name, param in new_params.items():
@@ -262,6 +308,7 @@ def main():
     model.load_state_dict(new_params)
     
     model  = nn.DataParallel(model)
+    #model = 
     model = model.to(device)
     model.train()
     #model.cuda(args.gpu)
@@ -272,6 +319,9 @@ def main():
     model_D = s4GAN_discriminator(num_classes=args.num_classes, dataset=args.dataset)
     if args.restore_from_D is not None:
         model_D.load_state_dict(torch.load(args.restore_from_D))
+    if restore_model_D is not None:
+        print("restoring discriminator")
+        model_D.load_state_dict(torch.load(restore_model_D))
     model_D = nn.DataParallel(model_D)
     model_D = model_D.to(device) 
     model_D.train()
@@ -418,6 +468,8 @@ def main():
         os.makedirs(generator_viz_dir)        
     #import pdb
     #pdb.set_trace()
+    if os.path.exists(checkpoint_dir):
+        restore_iteration = find_checkpoint(checkpoint_dir)   
     for i_iter in range(args.num_steps):
 
         #print('iter',i_iter) 
@@ -589,13 +641,13 @@ def main():
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
-            #torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
+            torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'_D.pth'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter!=0:
             print ('saving checkpoint  ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'.pth'))
-            #torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
+            torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
 
     end = timeit.default_timer()
     print (end-start,'seconds')
