@@ -292,10 +292,12 @@ def main():
             restore_model_D = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'_D.pth')
             print("restoring from requeued point:", restore_iteration)
         else:
+            restore_iteration = 0 
             restore_model = args.restore_from
             restore_model_D = None
             print("starting from scratch")
     else:
+        restore_iteration = 0
         restore_model = args.restore_from
         restore_model_D = None
         print("new model")
@@ -474,10 +476,11 @@ def main():
     #import pdb
     #pdb.set_trace()
     #if os.path.exists(checkpoint_dir):
-    #    restore_iteration = find_checkpoint(checkpoint_dir)   
-    for i_iter in range(args.num_steps):
+    #    restore_iteration = find_checkpoint(checkpoint_dir)  
+     
+    for i_iter in range(restore_iteration, args.num_steps):
 
-        #print('iter',i_iter) 
+        print(i_iter, "starting training from") 
         loss_ce_value = 0
         loss_D_value = 0
         loss_fm_value = 0
