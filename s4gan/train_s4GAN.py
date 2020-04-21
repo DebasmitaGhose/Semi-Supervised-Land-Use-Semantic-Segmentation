@@ -291,6 +291,7 @@ def main():
             restore_model = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'.pth')
             restore_model_D = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'_D.pth')
             print("restoring from requeued point:", restore_iteration)
+            print("Loading Checkpoint: ", os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'.pth'))
         else:
             restore_iteration = 0 
             restore_model = args.restore_from
@@ -480,7 +481,7 @@ def main():
      
     for i_iter in range(restore_iteration, args.num_steps):
 
-        print(i_iter, "starting training from") 
+        #print(i_iter, "starting training from") 
         loss_ce_value = 0
         loss_D_value = 0
         loss_fm_value = 0
