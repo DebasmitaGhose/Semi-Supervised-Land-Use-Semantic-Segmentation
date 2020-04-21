@@ -294,6 +294,9 @@ def main():
             restore_model = args.restore_from
             restore_model_D = None
             print("starting from scratch")
+    else:
+        restore_model = args.restore_from
+        print("new model")
     #print(model)
     # load pretrained parameters
     saved_state_dict = torch.load(restore_model)
