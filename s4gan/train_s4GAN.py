@@ -285,6 +285,7 @@ def main():
         str(args.threshold_st)
     )
     if os.path.exists(checkpoint_dir):
+        print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
             restore_model = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'.pth')
@@ -296,6 +297,7 @@ def main():
             print("starting from scratch")
     else:
         restore_model = args.restore_from
+        restore_model_D = None
         print("new model")
     #print(model)
     # load pretrained parameters
@@ -471,8 +473,8 @@ def main():
         os.makedirs(generator_viz_dir)        
     #import pdb
     #pdb.set_trace()
-    if os.path.exists(checkpoint_dir):
-        restore_iteration = find_checkpoint(checkpoint_dir)   
+    #if os.path.exists(checkpoint_dir):
+    #    restore_iteration = find_checkpoint(checkpoint_dir)   
     for i_iter in range(args.num_steps):
 
         #print('iter',i_iter) 
