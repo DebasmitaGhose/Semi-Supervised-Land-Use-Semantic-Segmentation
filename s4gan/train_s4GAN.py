@@ -199,8 +199,8 @@ def find_good_maps(D_outs, pred_all, device):
             count +=1
             indexes.append(i)
              
-    #import pdb
-    #pdb.set_trace()
+    import pdb
+    pdb.set_trace()
     if count > 0:
         print ('Above ST-Threshold : ', count, '/', args.batch_size)
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
