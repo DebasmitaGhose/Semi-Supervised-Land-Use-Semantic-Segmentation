@@ -64,6 +64,7 @@ RANDOM_SEED = 1234
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
+LAMBDA_SEMI_ADV=0.1
 THRESHOLD_ST = 0.3 #0.6
 EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
@@ -108,6 +109,8 @@ rse all the arguments provided from the CLI.
                         help="lambda_fm for feature-matching loss.")
     parser.add_argument("--lambda-st", type=float, default=LAMBDA_ST,
                         help="lambda_st for self-training.")
+    parser.add_argument("--lambda-semi-adv", type=float, default=LAMBDA_SEMI_ADV,
+                        help="lambda_semi_adv for adversarial loss in Generator.")
     parser.add_argument("--threshold-st", type=float, default=THRESHOLD_ST,
                         help="threshold_st for the self-training threshold.")
     parser.add_argument("--momentum", type=float, default=MOMENTUM,
@@ -199,8 +202,8 @@ def find_good_maps(D_outs, pred_all, device):
             count +=1
             indexes.append(i)
              
-    import pdb
-    pdb.set_trace()
+    #import pdb
+    #pdb.set_trace()
     if count > 0:
         print ('Above ST-Threshold : ', count, '/', args.batch_size)
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
@@ -261,6 +264,15 @@ def find_checkpoint(checkpoint_dir):
     else:
         restore_flag = True
     return (min(max_S, max_D)), restore_flag
+
+
+def make_D_label(label, ignore_mask):
+    ignore_mask = np.expand_dims(ignore_mask, axis=1)
+    D_label = np.ones(ignore_mask.shape)*label
+    D_label[ignore_mask] = 255
+    D_label = Variable(torch.FloatTensor(D_label)).cuda(args.gpu)
+
+    return D_label
 
 
 def main():
@@ -486,6 +498,8 @@ def main():
         loss_D_value = 0
         loss_fm_value = 0
         loss_S_value = 0
+        loss_adv_pred_value = 0
+        loss_semi_adv_value = 0
 
         optimizer.zero_grad()
         # adjust_learning_rate(optimizer, i_iter)
@@ -546,6 +560,13 @@ def main():
         pred_cat = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
         D_out_z, D_out_y_pred = model_D(pred_cat) # predicts the D ouput 0-1 and feature map for FM-loss 
   
+        #BMVC_adv loss for unlabeled data
+        gt_label = 1
+        ignore_mask_remain = np.zeros(D_out_y_pred.shape).astype(np.bool)
+        bce_target = make_D_label(gt_label, ignore_mask_remain))
+        loss_semi_adv = args.lambda_semi_adv * bce_loss
+        #loss_semi_adv.backward()
+        loss_semi_adv_value += loss_semi_adv.data.cpu().numpy()[0]/args.lambda_semi_adv
         # find predicted segmentation maps above threshold
         pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain, device) 
         
