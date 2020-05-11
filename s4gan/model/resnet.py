@@ -12,6 +12,9 @@ from collections import OrderedDict
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from .cbam import *
+from .bam import *
+
 
 try:
     from encoding.nn import SyncBatchNorm
@@ -57,6 +60,7 @@ class _Bottleneck(nn.Module):
         self.reduce = _ConvBnReLU(in_ch, mid_ch, 1, stride, 0, 1, True)
         self.conv3x3 = _ConvBnReLU(mid_ch, mid_ch, 3, 1, dilation, dilation, True)
         self.increase = _ConvBnReLU(mid_ch, out_ch, 1, 1, 0, 1, False)
+        self.cbam = CBAM(out_ch,16)
         self.shortcut = (
             _ConvBnReLU(in_ch, out_ch, 1, stride, 0, 1, False)
             if downsample
@@ -67,6 +71,7 @@ class _Bottleneck(nn.Module):
         h = self.reduce(x)
         h = self.conv3x3(h)
         h = self.increase(h)
+        h = self.cbam(h)
         h += self.shortcut(x)
         return F.relu(h)
 
