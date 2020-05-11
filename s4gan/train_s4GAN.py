@@ -532,8 +532,8 @@ def main():
         
         ###adv_pred_loss for labeled images
         ignore_mask = (labels.numpy()==255)
-        import pdb
-        pdb.set_trace()
+        #import pdb
+        #pdb.set_trace()
         images = (images-torch.min(images))/(torch.max(images)- torch.min(images))
         pred_cat = torch.cat((F.softmax(pred, dim=1), images), dim=1)
         _, _, D_adv_loss_map = model_D(pred_cat)
@@ -543,22 +543,24 @@ def main():
         bce_loss_target = make_D_label(gt_label, ignore_mask, device)
         
         #print(bce_loss_target.shape,labels.size(),D_adv_loss_map.size())
+        print("labeled data")
         loss_adv_pred = bce_loss(D_adv_loss_map, bce_loss_target)
        
         ##############UNLABELED IMAGES###################################################################### 
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
+            #print(batch_remain, "batch_remain")
         except:
             trainloader_remain_iter = iter(trainloader_remain)
-            print(next(trainloader_remain_iter), "trainloader remain iter")
+            #print(next(trainloader_remain_iter), "trainloader remain iter")
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
         images_remain = Variable(images_remain).to(device)
-
+        print(images_remain.size(), "images_remain")
         pred_remain = interp(model(images_remain))
-         
+        print(pred_remain.size(), "pred_remain") 
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
         pred_cat_remain = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
@@ -566,8 +568,11 @@ def main():
   
         #BMVC_adv loss for unlabeled data
         D_adv_loss_map = interp(D_adv_loss_map)
-        ignore_mask_remain = np.zeros(labels.size()).astype(np.bool)
+        ignore_mask_remain = np.zeros(D_adv_loss_map.squeeze(1).size()).astype(np.bool) # labels.size
         bce_loss_target = make_D_label(gt_label, ignore_mask_remain, device)
+        print(bce_loss_target.size(), "bce_loss_target")
+        print(D_adv_loss_map.size(), "D_adv_loss_map")
+        print("unlabeled data")
         loss_semi_adv = bce_loss(D_adv_loss_map, bce_loss_target)
 
         # find predicted segmentation maps above threshold
