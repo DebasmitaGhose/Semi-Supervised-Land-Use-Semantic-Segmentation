@@ -297,7 +297,7 @@ def main():
         str(args.labeled_ratio),
         str(args.threshold_st)
     )
-    if os.path.exists(checkpoint_dir):
+    if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir))!=0:
         print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
@@ -532,8 +532,8 @@ def main():
         
         ###adv_pred_loss for labeled images
         ignore_mask = (labels.numpy()==255)
-        import pdb
-        pdb.set_trace()
+        #import pdb
+        #pdb.set_trace()
         images = (images-torch.min(images))/(torch.max(images)- torch.min(images))
         pred_cat = torch.cat((F.softmax(pred, dim=1), images), dim=1)
         _, _, D_adv_loss_map = model_D(pred_cat)
@@ -551,7 +551,7 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         except:
             trainloader_remain_iter = iter(trainloader_remain)
-            print(next(trainloader_remain_iter), "trainloader remain iter")
+            #print(next(trainloader_remain_iter), "trainloader remain iter")
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
@@ -566,7 +566,7 @@ def main():
   
         #BMVC_adv loss for unlabeled data
         D_adv_loss_map = interp(D_adv_loss_map)
-        ignore_mask_remain = np.zeros(labels.size()).astype(np.bool)
+        ignore_mask_remain = np.zeros(D_adv_loss_map.squeeze(1).size()).astype(np.bool)
         bce_loss_target = make_D_label(gt_label, ignore_mask_remain, device)
         loss_semi_adv = bce_loss(D_adv_loss_map, bce_loss_target)
 
