@@ -297,7 +297,7 @@ def main():
         str(args.labeled_ratio),
         str(args.threshold_st)
     )
-    if os.path.exists(checkpoint_dir):
+    if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir))!=0:
         print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
@@ -543,7 +543,7 @@ def main():
         bce_loss_target = make_D_label(gt_label, ignore_mask, device)
         
         #print(bce_loss_target.shape,labels.size(),D_adv_loss_map.size())
-        print("labeled data")
+        #print("labeled data")
         loss_adv_pred = bce_loss(D_adv_loss_map, bce_loss_target)
        
         ##############UNLABELED IMAGES###################################################################### 
@@ -558,9 +558,9 @@ def main():
         
         images_remain, _, _, names, _ = batch_remain
         images_remain = Variable(images_remain).to(device)
-        print(images_remain.size(), "images_remain")
+        #print(images_remain.size(), "images_remain")
         pred_remain = interp(model(images_remain))
-        print(pred_remain.size(), "pred_remain") 
+        #print(pred_remain.size(), "pred_remain") 
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
         pred_cat_remain = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
@@ -570,9 +570,9 @@ def main():
         D_adv_loss_map = interp(D_adv_loss_map)
         ignore_mask_remain = np.zeros(D_adv_loss_map.squeeze(1).size()).astype(np.bool) # labels.size
         bce_loss_target = make_D_label(gt_label, ignore_mask_remain, device)
-        print(bce_loss_target.size(), "bce_loss_target")
-        print(D_adv_loss_map.size(), "D_adv_loss_map")
-        print("unlabeled data")
+        #print(bce_loss_target.size(), "bce_loss_target")
+        #print(D_adv_loss_map.size(), "D_adv_loss_map")
+        #print("unlabeled data")
         loss_semi_adv = bce_loss(D_adv_loss_map, bce_loss_target)
 
         # find predicted segmentation maps above threshold
@@ -656,7 +656,7 @@ def main():
         scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_semi_adv= {4:.3f},loss_adv_pred = {5:.3f}, loss_S = {6:.3f}, loss_D = {7:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_semi_adv_value, loss_adv_pred_value, loss_S_value, loss_D_value)) 
-        
+        '''
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
             writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
@@ -677,7 +677,7 @@ def main():
                 writer.add_histogram(
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
-
+        '''
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))

@@ -46,8 +46,8 @@ class BCEWithLogitsLoss2d(nn.Module):
                 weight (Tensor, optional): a manual rescaling weight given to each class.
                                            If given, has to be a Tensor of size "nclasses"
         """
-        print(target.size(), "target")
-        print(predict.size(), "predict")
+        #print(target.size(), "target")
+        #print(predict.size(), "predict")
         assert not target.requires_grad
         assert predict.dim() == 4
         assert target.dim() == 4
