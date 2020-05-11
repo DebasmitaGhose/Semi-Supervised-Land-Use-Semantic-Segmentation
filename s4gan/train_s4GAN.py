@@ -669,7 +669,7 @@ def main():
         scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_semi_adv= {4:.3f},loss_adv_pred = {5:.3f}, loss_S = {6:.3f}, loss_spatial_D = {7:.3f}, loss_D = {8:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_semi_adv_value, loss_adv_pred_value, loss_S_value, loss_spatial_D, loss_D_value )) 
-        
+        '''
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
             writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
@@ -690,6 +690,7 @@ def main():
                 writer.add_histogram(
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
+        '''
 
         if i_iter >= args.num_steps-1:
             print ('save model ...')
