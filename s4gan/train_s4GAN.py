@@ -297,7 +297,7 @@ def main():
         str(args.labeled_ratio),
         str(args.threshold_st)
     )
-    if os.path.exists(checkpoint_dir):
+    if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir))!=0:
         print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
@@ -532,8 +532,8 @@ def main():
         
         ###adv_pred_loss for labeled images
         ignore_mask = (labels.numpy()==255)
-        import pdb
-        pdb.set_trace()
+        #import pdb
+        #pdb.set_trace()
         images = (images-torch.min(images))/(torch.max(images)- torch.min(images))
         pred_cat = torch.cat((F.softmax(pred, dim=1), images), dim=1)
         _, _, D_adv_loss_map = model_D(pred_cat)
@@ -551,7 +551,7 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         except:
             trainloader_remain_iter = iter(trainloader_remain)
-            print(next(trainloader_remain_iter), "trainloader remain iter")
+            #print(next(trainloader_remain_iter), "trainloader remain iter")
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
@@ -566,7 +566,7 @@ def main():
   
         #BMVC_adv loss for unlabeled data
         D_adv_loss_map = interp(D_adv_loss_map)
-        ignore_mask_remain = np.zeros(labels.size()).astype(np.bool)
+        ignore_mask_remain = np.zeros(D_adv_loss_map.squeeze(1).size()).astype(np.bool)
         bce_loss_target = make_D_label(gt_label, ignore_mask_remain, device)
         loss_semi_adv = bce_loss(D_adv_loss_map, bce_loss_target)
 
@@ -669,7 +669,7 @@ def main():
         scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_semi_adv= {4:.3f},loss_adv_pred = {5:.3f}, loss_S = {6:.3f}, loss_spatial_D = {7:.3f}, loss_D = {8:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_semi_adv_value, loss_adv_pred_value, loss_S_value, loss_spatial_D, loss_D_value )) 
-        
+        ''' 
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
             writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
@@ -690,7 +690,7 @@ def main():
                 writer.add_histogram(
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
-
+        '''
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
