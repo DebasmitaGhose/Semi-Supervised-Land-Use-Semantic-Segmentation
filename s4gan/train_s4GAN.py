@@ -25,7 +25,7 @@ from model import *
 
 
 from model.discriminator import s4GAN_discriminator
-from utils.loss import CrossEntropy2d
+from utils.loss import CrossEntropy2d, BCEWithLogitsLoss2d
 from data.voc_dataset import VOCDataSet, VOCGTDataSet # modify this
 from data.ucm_dataset import UCMDataSet
 from data import get_loader, get_data_path
@@ -64,7 +64,8 @@ RANDOM_SEED = 1234
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
-LAMBDA_SEMI_ADV=0.1
+LAMBDA_SEMI_ADV=0.001
+LAMBDA_ADV_PRED=0.1
 THRESHOLD_ST = 0.3 #0.6
 EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
@@ -73,9 +74,7 @@ EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
 
 def get_arguments():
-    """Pt '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
-st '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
-rse all the arguments provided from the CLI.
+    """Parse all the arguments provided from the CLI.
 
     Returns:
       A list of parsed arguments.
@@ -111,6 +110,8 @@ rse all the arguments provided from the CLI.
                         help="lambda_st for self-training.")
     parser.add_argument("--lambda-semi-adv", type=float, default=LAMBDA_SEMI_ADV,
                         help="lambda_semi_adv for adversarial loss in Generator.")
+    parser.add_argument("--lambda-adv-pred", type=float, default=LAMBDA_ADV_PRED,
+                        help="lambda_adv_pred for adversarial loss in Generator")
     parser.add_argument("--threshold-st", type=float, default=THRESHOLD_ST,
                         help="threshold_st for the self-training threshold.")
     parser.add_argument("--momentum", type=float, default=MOMENTUM,
@@ -266,11 +267,11 @@ def find_checkpoint(checkpoint_dir):
     return (min(max_S, max_D)), restore_flag
 
 
-def make_D_label(label, ignore_mask):
+def make_D_label(label, ignore_mask, device):
     ignore_mask = np.expand_dims(ignore_mask, axis=1)
     D_label = np.ones(ignore_mask.shape)*label
     D_label[ignore_mask] = 255
-    D_label = Variable(torch.FloatTensor(D_label)).cuda(args.gpu)
+    D_label = Variable(torch.FloatTensor(D_label)).cuda(device)
 
     return D_label
 
@@ -360,7 +361,6 @@ def main():
         input_transform = transform.Compose([transform.ToTensor(),
             transform.Normalize([.406, .456, .485], [.229, .224, .225])])
         data_kwargs = {'transform': input_transform, 'base_size': 505, 'crop_size': 321}
-        #train_dataset = get_segmentation_dataset('pcontext', split='train', mode='train', **data_kwargs)
         data_loader = get_loader('pascal_context')
         data_path = get_data_path('pascal_context') 
         train_dataset = data_loader(data_path, split='train', mode='train', **data_kwargs)
@@ -450,6 +450,9 @@ def main():
     # optimizer for discriminator network
     optimizer_D = optim.Adam(model_D.parameters(), lr=args.learning_rate_D, betas=(0.9,0.99))
     optimizer_D.zero_grad()
+    
+    # define bce_loss (BMVC)
+    bce_loss = BCEWithLogitsLoss2d()
 
     interp = nn.Upsample(size=(input_size[0], input_size[1]), mode='bilinear', align_corners=True)
 
@@ -502,7 +505,6 @@ def main():
         loss_semi_adv_value = 0
 
         optimizer.zero_grad()
-        # adjust_learning_rate(optimizer, i_iter)
         optimizer_D.zero_grad()
         adjust_learning_rate_D(optimizer_D, i_iter)
 
@@ -511,6 +513,8 @@ def main():
         for param in model_D.parameters():
             param.requires_grad = False
 
+        ##################################LABELED DATA################################################        
+
         # training loss for labeled data only
         try:
             batch = next(trainloader_iter)
@@ -518,25 +522,30 @@ def main():
             trainloader_iter = iter(trainloader)
             batch = next(trainloader_iter)
 
+        ###Cross entropy labeled images
         images, labels, _, _, _ = batch
-        #images = Variable(images).cuda(args.gpu)
         images = Variable(images).to(device)
         pred = interp(model(images))
-        #print(images, "images")   
-        import pdb
-        #pdb.set_trace()
-        #logits = F.interpolate(
-        #    logits, size=(H, W), mode="bilinear", align_corners=False
-        #)
+        #loss calculation
+        loss_ce = loss_calc(pred, labels, device)        
+
         
-        #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
-        loss_ce = loss_calc(pred, labels, device)
-        #print(loss_ce, "loss_ce")
-        #print(pred.shape, "pred")
-        #print(labels.shape, "labels")
+        ###adv_pred_loss for labeled images
+        ignore_mask = (labels.numpy()==255)
+        import pdb
+        pdb.set_trace()
+        images = (images-torch.min(images))/(torch.max(images)- torch.min(images))
+        pred_cat = torch.cat((F.softmax(pred, dim=1), images), dim=1)
+        _, _, D_adv_loss_map = model_D(pred_cat)
+        D_adv_loss_map = interp(D_adv_loss_map)
+        #print('pred_cat size',pred_cat.size())
+        ###loss calculation
+        bce_loss_target = make_D_label(gt_label, ignore_mask, device)
+        
+        #print(bce_loss_target.shape,labels.size(),D_adv_loss_map.size())
+        loss_adv_pred = bce_loss(D_adv_loss_map, bce_loss_target)
        
-         
-        #print(next(trainloader_remain_iter))
+        ##############UNLABELED IMAGES###################################################################### 
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
@@ -546,27 +555,21 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
-        #print(images_remain.shape, "images remain")
-        #print(device, "device")
-        #print(Variable(images_remain))
-        #images_remain = Variable(images_remain).cuda(args.gpu)
         images_remain = Variable(images_remain).to(device)
 
         pred_remain = interp(model(images_remain))
          
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
-        #print (pred_remain.size(), images_remain.size())
         pred_cat = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
-        D_out_z, D_out_y_pred = model_D(pred_cat) # predicts the D ouput 0-1 and feature map for FM-loss 
+        D_out_z, D_out_y_pred, D_adv_loss_map = model_D(pred_cat) # predicts the D ouput 0-1 and feature map for FM-loss 
   
         #BMVC_adv loss for unlabeled data
-        gt_label = 1
-        ignore_mask_remain = np.zeros(D_out_y_pred.shape).astype(np.bool)
-        bce_target = make_D_label(gt_label, ignore_mask_remain))
-        loss_semi_adv = args.lambda_semi_adv * bce_loss
-        #loss_semi_adv.backward()
-        loss_semi_adv_value += loss_semi_adv.data.cpu().numpy()[0]/args.lambda_semi_adv
+        D_adv_loss_map = interp(D_adv_loss_map)
+        ignore_mask_remain = np.zeros(labels.size()).astype(np.bool)
+        bce_loss_target = make_D_label(gt_label, ignore_mask_remain, device)
+        loss_semi_adv = bce_loss(D_adv_loss_map, bce_loss_target)
+
         # find predicted segmentation maps above threshold
         pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain, device) 
         
@@ -589,7 +592,7 @@ def main():
         else:
             loss_st = 0.0
 
-        # Concatenates the input images and ground-truth maps for the Districrimator 'Real' input
+        # Concatenates the input images and ground-truth maps for the Discrimator 'Real' input
         try:
             batch_gt = next(trainloader_gt_iter)
         except:
@@ -598,28 +601,29 @@ def main():
 
         images_gt, labels_gt, _, _, _ = batch_gt
         # Converts grounth truth segmentation into 'num_classes' segmentation maps. 
-        #D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
+        # D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
         D_gt_v = Variable(one_hot(labels_gt)).to(device)
                 
         images_gt = images_gt.to(device)
         images_gt = (images_gt - torch.min(images_gt))/(torch.max(images)-torch.min(images))
             
         D_gt_v_cat = torch.cat((D_gt_v, images_gt), dim=1)
-        D_out_z_gt , D_out_y_gt = model_D(D_gt_v_cat)
+        D_out_z_gt , D_out_y_gt, _  = model_D(D_gt_v_cat)
         
         # L1 loss for Feature Matching Loss
         loss_fm = torch.mean(torch.abs(torch.mean(D_out_y_gt, 0) - torch.mean(D_out_y_pred, 0)))
     
         if count > 0 and i_iter > 0: # if any good predictions found for self-training loss
-            loss_S = loss_ce +  args.lambda_fm*loss_fm + args.lambda_st*loss_st 
+            loss_S = loss_ce +  args.lambda_fm*loss_fm + args.lambda_st*loss_st + args.lambda_adv_pred * loss_adv_pred + args.lambda_semi_adv*loss_semi_adv
         else:
-            loss_S = loss_ce + args.lambda_fm*loss_fm
+            loss_S = loss_ce + args.lambda_fm*loss_fm + args.lambda_adv_pred * loss_adv_pred + args.lambda_semi_adv*loss_semi_adv
 
         loss_S.backward()
         loss_fm_value+= args.lambda_fm*loss_fm
-
+        loss_adv_pred_value += args.lambda_adv_pred * loss_adv_pred
         loss_ce_value += loss_ce.item()
         loss_S_value += loss_S.item()
+        loss_semi_adv_value += args.lambda_semi_adv*loss_semi_adv
 
         # train D
         for param in model_D.parameters():
@@ -628,12 +632,12 @@ def main():
         # train with pred
         pred_cat = pred_cat.detach()  # detach does not allow the graddients to back propagate.
         
-        D_out_z, _ = model_D(pred_cat)
+        D_out_z, _ , _ = model_D(pred_cat)
         y_fake_ = Variable(torch.zeros(D_out_z.size(0), 1).to(device))
         loss_D_fake = criterion(D_out_z, y_fake_) 
 
         # train with gt
-        D_out_z_gt , _ = model_D(D_gt_v_cat)
+        D_out_z_gt , _, _ = model_D(D_gt_v_cat)
         y_real_ = Variable(torch.ones(D_out_z_gt.size(0), 1).to(device)) 
         loss_D_real = criterion(D_out_z_gt, y_real_)
         
@@ -645,7 +649,7 @@ def main():
         optimizer_D.step()
         scheduler.step(epoch=i_iter)
 
-        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value)) 
+        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_semi_adv= {4:.3f},loss_adv_pred = {5:.3f}, loss_S = {6:.3f}, loss_D = {7:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_semi_adv_value, loss_adv_pred_value, loss_S_value, loss_D_value)) 
         
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
