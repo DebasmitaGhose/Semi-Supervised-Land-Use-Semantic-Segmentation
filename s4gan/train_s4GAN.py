@@ -561,8 +561,8 @@ def main():
          
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
-        pred_cat = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
-        D_out_z, D_out_y_pred, D_adv_loss_map = model_D(pred_cat) # predicts the D ouput 0-1 and feature map for FM-loss 
+        pred_cat_remain = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
+        D_out_z, D_out_y_pred, D_adv_loss_map = model_D(pred_cat_remain) # predicts the D ouput 0-1 and feature map for FM-loss 
   
         #BMVC_adv loss for unlabeled data
         D_adv_loss_map = interp(D_adv_loss_map)
@@ -630,9 +630,10 @@ def main():
             param.requires_grad = True
 
         # train with pred
-        pred_cat = pred_cat.detach()  # detach does not allow the graddients to back propagate.
-        
-        D_out_z, _ , _ = model_D(pred_cat)
+        pred_cat_remain = pred_cat.detach()  # detach does not allow the graddients to back propagate.
+        pred_cat = pred_cat.detach()
+
+        D_out_z, _ , _ = model_D(pred_cat_remain)
         y_fake_ = Variable(torch.zeros(D_out_z.size(0), 1).to(device))
         loss_D_fake = criterion(D_out_z, y_fake_) 
 
