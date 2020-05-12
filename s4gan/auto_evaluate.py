@@ -135,10 +135,7 @@ def UCMColorize(label_mask, save_file):
         rgb[:, :, 0] = b #r
         rgb[:, :, 1] = g #g 
         rgb[:, :, 2] = r #b 
-        #print(rgb.shape, 'rgb')
         print(save_file)
-				#plt.imshow(rgb)
-        #plt.savefig(save_file)
         cv2.imwrite(save_file, rgb)
 
         return rgb
@@ -195,12 +192,11 @@ def get_iou(args, data_list, class_num, save_path=None):
     m_list = pool.map(f, data_list)
     pool.close() 
     pool.join() 
-    #print(len(m_list[0]))  
     for m in m_list:
         ConfM.addM(m)
 
     aveJ, j_list, M = ConfM.jaccard()
-    #print(j_list)
+
 
     if args.dataset == 'pascal_voc':
         classes = np.array(('background',  # always index 0
@@ -243,28 +239,13 @@ def get_iou(args, data_list, class_num, save_path=None):
 def crf_process(image, label, logit, size, postprocessor):
         H = size[0]
         W = size[1]
-        #print(logit.shape, "before")
-        #logit = torch.FloatTensor(logit)#[None, ...]
-        #logit = torch.unsqueeze(logit,0)
-        #print(logit.shape, "logit inside crf_process")
         logit = F.interpolate(logit, size=(H, W), mode="bilinear", align_corners=False)
-        #print(logit, "logit")
-        #logit = torch.squeeze(logit, 0)
-        #print(logit.shape, "logit")
         prob = F.softmax(logit, dim=1)[0].cpu().numpy()
-        
-        #print(F.softmax(logit, dim=2).shape, "prob") # dim = 1
         image = torch.squeeze(image)
-        #print(prob, "prob")
         image = image.numpy()
-        #print(image.shape, "image passed to postprocessor")
         image = image.astype(np.uint8).transpose(1, 2, 0)
-        #print(image.shape, "image passed to postprocessor")
-        #print(image, "image")
         prob_post = postprocessor(image, prob)
-        #print(prob_post, "prob_post")
         crf_label = np.argmax(prob_post, axis=0)
-
         return crf_label
 
 def main():
@@ -277,191 +258,167 @@ def main():
   
     for epoch in range(start,end):        
         if not os.path.exists(args.save_dir):
-	os.makedirs(args.save_dir)
-	#pdb.set_trace()
-	#model = Res_Deeplab(num_classes=args.num_classes)
-	model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
-	model.cuda()
+            os.makedirs(args.save_dir)
 
-		if args.restore_from[:4] == 'http' :
-		saved_state_dict = model_zoo.load_url(args.restore_from)
-		#elif EXP_ID == "default":
-		#    print("Restoring from default")
-		#    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
-		elif args.threshold_st is not None:
-		print("Loading new weights")
-		print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'), 'saved weights')
-		saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'))
+        model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
+        model.cuda()
 
-		else:
-		print("Loading old weights")
-		#saved_state_dict = torch.load(args.restore_from)
-		print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'), 'saved weights')
-		saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'))
-		#print("Restoring from: ", saved_state_dict)
-		model.load_state_dict(saved_state_dict)
+        if args.restore_from[:4] == 'http' :
+            saved_state_dict = model_zoo.load_url(args.restore_from)
+        #elif EXP_ID == "default":
+        #    print("Restoring from default")
+        #    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
+        elif args.threshold_st is not None:
+            print("Loading new weights")
+            print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'), 'saved weights')
+            saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'))
 
-		model.eval()
-		model.cuda(gpu0)
+        else:
+            print("Loading old weights")
+            #saved_state_dict = torch.load(args.restore_from)
+            print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'), 'saved weights')
+            saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'))
+            #print("Restoring from: ", saved_state_dict)
+        
+        model.load_state_dict(saved_state_dict)
 
-		if args.dataset == 'pascal_voc':
-				testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
-									batch_size=1, shuffle=False, pin_memory=True)
-				interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+        model.eval()
+        model.cuda(gpu0)
 
-		elif args.dataset == 'ucm':
-				testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
-									batch_size=1, shuffle=False, pin_memory=True)
-				interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
-				if args.crf:
-						testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
-								batch_size=1, shuffle=False, pin_memory=True)
-				    interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
+        if args.dataset == 'pascal_voc':
+            testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
+                                    batch_size=1, shuffle=False, pin_memory=True)
+            interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+
+        elif args.dataset == 'ucm':
+            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
+                                    batch_size=1, shuffle=False, pin_memory=True)
+            interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
+            if args.crf:
+                testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
+                                batch_size=1, shuffle=False, pin_memory=True)
+                interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
 
 
-		elif args.dataset == 'pascal_context':
-	input_transform = transform.Compose([transform.ToTensor(),
-					transform.Normalize([.485, .456, .406], [.229, .224, .225])])
-		    data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': 512}
-				data_loader = get_loader('pascal_context')
-				data_path = get_data_path('pascal_context')
-				test_dataset = data_loader(data_path, split='val', mode='val', **data_kwargs)
-				testloader = data.DataLoader(test_dataset, batch_size=1, drop_last=False, shuffle=False, num_workers=1, pin_memory=True)
-				interp = nn.Upsample(size=(512, 512), mode='bilinear', align_corners=True)
+        elif args.dataset == 'pascal_context':
+            input_transform = transform.Compose([transform.ToTensor(),
+                    transform.Normalize([.485, .456, .406], [.229, .224, .225])])
+            data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': 512}
+            data_loader = get_loader('pascal_context')
+            data_path = get_data_path('pascal_context')
+            test_dataset = data_loader(data_path, split='val', mode='val', **data_kwargs)
+            testloader = data.DataLoader(test_dataset, batch_size=1, drop_last=False, shuffle=False, num_workers=1, pin_memory=True)
+            interp = nn.Upsample(size=(512, 512), mode='bilinear', align_corners=True)
 
-	  elif args.dataset == 'cityscapes':
-				data_loader = get_loader('cityscapes')
-				data_path = get_data_path('cityscapes')
-				test_dataset = data_loader( data_path, img_size=(512, 1024), is_transform=True, split='val')
-				testloader = data.DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True)
-				interp = nn.Upsample(size=(512, 1024), mode='bilinear', align_corners=True)
-					
-	  data_list = []
-	  gt_list = []
-		output_list = []
-		crf_result_list = []
-		#colorize = VOCColorize()
-		#colorize = UCMColorize()
+        elif args.dataset == 'cityscapes':
+            data_loader = get_loader('cityscapes')
+            data_path = get_data_path('cityscapes')
+            test_dataset = data_loader( data_path, img_size=(512, 1024), is_transform=True, split='val')
+            testloader = data.DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True)
+            interp = nn.Upsample(size=(512, 1024), mode='bilinear', align_corners=True)
+                    
+        data_list = []
+        gt_list = []
+        output_list = []
+        crf_result_list = []
 
-		if args.with_mlmt:
-				mlmt_preds = np.loadtxt('mlmt_output/output_ema_p_1_0_voc_5.txt', dtype = float) # best mt 0.05
 
-				mlmt_preds[mlmt_preds>=0.2] = 1
-				mlmt_preds[mlmt_preds<0.2] = 0 
-			 
-	  for index, batch in enumerate(testloader):
-				if index % 1 == 0:
-						print('%d processd'%(index))
-				image, label, size, name, _ = batch
-				#print(size, "size")
-				size = size[0]
-				output  = model(Variable(image, volatile=True).cuda(gpu0))
-				crf_output = output.clone().detach()
-				#print(type(output))
-				output = interp(output).cpu().data[0].numpy()
-				
-				if args.dataset == 'pascal_voc':
-						output = output[:,:size[0],:size[1]]
-						gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
-				elif args.dataset == 'ucm':
-						output = output[:,:size[0],:size[1]]
-						gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
-					elif args.dataset == 'pascal_context':
-							gt = np.asarray(label[0].numpy(), dtype=np.int)
-					elif args.dataset == 'cityscapes':
-							gt = np.asarray(label[0].numpy(), dtype=np.int)
+        if args.with_mlmt:
+            mlmt_preds = np.loadtxt('mlmt_output/output_ema_p_1_0_voc_5.txt', dtype = float) # best mt 0.05
 
-					if args.with_mlmt:
-							for i in range(args.num_classes):
-						      output[i]= output[i]*mlmt_preds[index][i]
-					
-					output = output.transpose(1,2,0)
-					output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
-					if args.labeled_ratio is not None:
-							viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
-							viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf", str(args.labeled_ratio), str(args.threshold_st))
-					else:
-							viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
-							viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
+            mlmt_preds[mlmt_preds>=0.2] = 1
+            mlmt_preds[mlmt_preds<0.2] = 0 
+             
+        for index, batch in enumerate(testloader):
+            if index % 1 == 0:
+                print('%d processd'%(index))
+            image, label, size, name, _ = batch
+            size = size[0]
+            output  = model(Variable(image, volatile=True).cuda(gpu0))
+            crf_output = output.clone().detach()
+            output = interp(output).cpu().data[0].numpy()
+                
+            if args.dataset == 'pascal_voc':
+                output = output[:,:size[0],:size[1]]
+                gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
+            elif args.dataset == 'ucm':
+                output = output[:,:size[0],:size[1]]
+                gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
+            elif args.dataset == 'pascal_context':
+                gt = np.asarray(label[0].numpy(), dtype=np.int)
+            elif args.dataset == 'cityscapes':
+                gt = np.asarray(label[0].numpy(), dtype=np.int)
 
-					if not os.path.exists(viz_dir):
-							makedirs(viz_dir)
-					if args.crf:
-							if not os.path.exists(viz_dir_crf):
-						      makedirs(viz_dir_crf)
-					print("Visualization dst:", viz_dir)
-					if args.crf:
-					    postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
-												   pos_xy_std=CRF_POS_XY_STD,
-												   pos_w=CRF_POS_W,
-												   bi_xy_std=CRF_BI_XY_STD,
-												   bi_rgb_std=CRF_BI_RGB_STD,
-												   bi_w=CRF_BI_W,)
-							#print(postprocessor, "postprocessor")
-							result_crf = crf_process(image, label, crf_output, size, postprocessor)
-							#print(result_crf, "crf result")
-					if args.save_output_images:
-					    if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
-							    filename = '{}.png'.format(name[0])
-									#print(type(output), "output in visualize")
-									#color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-									savefile = os.path.join(viz_dir, filename)
-									color_file = UCMColorize(output, savefile)
-									#color_file.save(os.path.join(viz_dir, filename))
-							#elif args.dataset == 'pascal_context':
-							#    filename = os.path.join(args.save_dir, filename[0])
-							#    scipy.misc.imsave(filename, gt)i
-							#print(output.shape, "output shape")
-							if args.crf:
-						      filename = '{}.png'.format(name[0])
-						      #print(type(output), "output in visualize")
-						      #color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-						      savefile = os.path.join(viz_dir_crf, filename)
-						      color_file = UCMColorize(result_crf, savefile)
-					
-					data_list.append([gt.flatten(), output.flatten()])
+            if args.with_mlmt:
+                for i in range(args.num_classes):
+                    output[i]= output[i]*mlmt_preds[index][i]
+                    
+            output = output.transpose(1,2,0)
+            output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
+            if args.labeled_ratio is not None:
+                viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
+                viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf", str(args.labeled_ratio), str(args.threshold_st))
+            else:
+                viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
+                viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
 
-					gt_list.append(gt)
-					output_list.append(output)
-			    if args.crf:
-							crf_result_list.append(result_crf)
-					#score = scores(data_list[0], output.flatten(), args.num_classes)
-			    #print(score)
-			#print(np.shape(data_list[0][:]),'data list')
-			if args.labeled_ratio is not None:
-					scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
-			else:
-					scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
-			if not os.path.exists(scores_dir):
-					makedirs(scores_dir)
-			scores_filename = os.path.join(scores_dir, "scores.json")
-			print("Scores saved at: ",scores_filename)
+            if not os.path.exists(viz_dir):
+                makedirs(viz_dir)
+            if args.crf:
+                if not os.path.exists(viz_dir_crf):
+                    makedirs(viz_dir_crf)
+            print("Visualization dst:", viz_dir)
+            if args.crf:
+                postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
+                                        pos_xy_std=CRF_POS_XY_STD,
+                                        pos_w=CRF_POS_W,
+                                        bi_xy_std=CRF_BI_XY_STD,
+                                        bi_rgb_std=CRF_BI_RGB_STD,
+                                        bi_w=CRF_BI_W,)
+                result_crf = crf_process(image, label, crf_output, size, postprocessor)
+            if args.save_output_images:
+                if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
+                    filename = '{}.png'.format(name[0])
+                    savefile = os.path.join(viz_dir, filename)
+                    color_file = UCMColorize(output, savefile)
 
-			if args.crf:
-					scores_filename_crf = os.path.join(scores_dir, "scores_crf.json")
-						
+                if args.crf:
+                    filename = '{}.png'.format(name[0])
+                    savefile = os.path.join(viz_dir_crf, filename)
+                    color_file = UCMColorize(result_crf, savefile)
+                    
+            data_list.append([gt.flatten(), output.flatten()])
 
-					#get_iou(args, data_list, args.num_classes, filename)
-			#print(np.shape(gt), 'gt')
-			#print(gt==output, 'gt')
-			#print(np.shape(output), 'output')
-			#print(output, 'output')
-			#print(np.shape(gt_list[0]), 'gt list')
-			#print(np.shape(output_list[0]), 'output list')
-			score = scores(gt_list, output_list, args.num_classes)
-			print(score)
-			with open(scores_filename, "w") as f:
-			    json.dump(score, f, indent=4, sort_keys=True)
+            gt_list.append(gt)
+            output_list.append(output)
+            if args.crf:
+                crf_result_list.append(result_crf)
 
-			if args.crf:
-					score_crf = scores(gt_list, crf_result_list, args.num_classes)
-			#print(score)
-					print("CRF Scores saved at: ",scores_filename_crf)
+    if args.labeled_ratio is not None:
+        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
+    else:
+        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
+    if not os.path.exists(scores_dir):
+        makedirs(scores_dir)
+    scores_filename = os.path.join(scores_dir, "scores.json")
+    print("Scores saved at: ",scores_filename)
 
-					with open(scores_filename_crf, "w") as f:
-							json.dump(score_crf, f, indent=4, sort_keys=True)
-						
-					
+    if args.crf:
+            scores_filename_crf = os.path.join(scores_dir, "scores_crf.json")
+
+    score = scores(gt_list, output_list, args.num_classes)
+    print(score)
+    with open(scores_filename, "w") as f:
+        json.dump(score, f, indent=4, sort_keys=True)
+
+    if args.crf:
+        score_crf = scores(gt_list, crf_result_list, args.num_classes)
+        print("CRF Scores saved at: ",scores_filename_crf)
+
+        with open(scores_filename_crf, "w") as f:
+            json.dump(score_crf, f, indent=4, sort_keys=True)
+                        
+                    
 
 if __name__ == '__main__':
     main()
