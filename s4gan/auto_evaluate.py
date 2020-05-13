@@ -62,6 +62,8 @@ def get_arguments():
                         help="epoch from which we want to start evaluation")
     parser.add_argument("--end-eval", type=int, default=20000,
                         help="epoch upto which we want to evaluate")
+    parser.add_argument("--step-eval", type=int, default=100,
+                        help="evaluation steps") 
     parser.add_argument("--dataset-split", type=str, default="test",
                         help="train,val,test,subset")
     parser.add_argument("--exp-id", type=str, default=EXP_ID,
@@ -255,8 +257,11 @@ def main():
     gpu0 = args.gpu
     start = args.start_eval
     end = args.end_eval
-  
-    for epoch in range(start,end):        
+    step = args.step_eval
+
+    max_mean_iou = 0.0
+    max_crf_mean_iou = 0.0
+    for epoch in range(start,end,step):        
         if not os.path.exists(args.save_dir):
             os.makedirs(args.save_dir)
 
@@ -394,31 +399,41 @@ def main():
             if args.crf:
                 crf_result_list.append(result_crf)
 
-    if args.labeled_ratio is not None:
-        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
-    else:
-        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
-    if not os.path.exists(scores_dir):
-        makedirs(scores_dir)
-    scores_filename = os.path.join(scores_dir, "scores.json")
-    print("Scores saved at: ",scores_filename)
+        if args.labeled_ratio is not None:
+            scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
+        else:
+            scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
+        if not os.path.exists(scores_dir):
+            makedirs(scores_dir)
 
-    if args.crf:
-            scores_filename_crf = os.path.join(scores_dir, "scores_crf.json")
+        score = scores(gt_list, output_list, args.num_classes)
+        print(score)
+        ####################auto-evaluate logic to evaluate scores and store the best one######################################################### 
+      
+        mean_iou = score['Mean IoU']
+        if mean_iou > max_mean_iou:
+            max_mean_iou = mean_iou
+            best_iteration = epoch
+            best_score_filename = os.path.join(scores_dir, "best_scores_" + str(epoch) + ".json")
+            print("Hey yo!!, Best score found at epoch : " + str(epoch) + "and the score is: " + str(max_mean_iou))
+            print("best Scores saved at: ", best_score_filename)
 
-    score = scores(gt_list, output_list, args.num_classes)
-    print(score)
-    with open(scores_filename, "w") as f:
-        json.dump(score, f, indent=4, sort_keys=True)
+        if args.crf:
+            score_crf = scores(gt_list, crf_result_list, args.num_classes)
+            crf_mean_iou = score_crf['Mean IoU']
+            if crf_mean_iou > max_crf_mean_iou:
+                max_crf_mean_iou = crf_mean_iou
+                best_crf_iteration = epoch
+                best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
+                print("CRF Scores saved at: ",best_score_filename_crf)
 
-    if args.crf:
-        score_crf = scores(gt_list, crf_result_list, args.num_classes)
-        print("CRF Scores saved at: ",scores_filename_crf)
+    with open(best_scores_filename_crf, "w") as f:
+        json.dump(best_score_filename, f, indent=4, sort_keys=True)
 
-        with open(scores_filename_crf, "w") as f:
-            json.dump(score_crf, f, indent=4, sort_keys=True)
-                        
-                    
+
+    with open(best_scores_filename, "w") as f:
+        json.dump(best_score_filename_crf, f, indent=4, sort_keys=True)
+
 
 if __name__ == '__main__':
     main()
