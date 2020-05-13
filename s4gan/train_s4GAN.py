@@ -67,6 +67,7 @@ LAMBDA_ST = 1.0
 LAMBDA_SEMI_ADV=0.001
 LAMBDA_ADV_PRED=0.1
 THRESHOLD_ST = 0.3 #0.6
+PIX_ST = 0.3
 EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
@@ -82,6 +83,8 @@ def get_arguments():
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
     parser.add_argument("--dataset-split",type=str,default="train",
                         help="train,val,test,subset")
+    parser.add_argument("--mask-T",type=float,default=PIX_ST,
+                       help="Threshold for spatial self-training mask")
     parser.add_argument("--exp-id",type=str,default=EXP_ID,
                         help="unique id to identify all files of an experiment:weights,viz,logs,etc.")
     parser.add_argument("--model", type=str, default=MODEL,
@@ -108,6 +111,8 @@ def get_arguments():
                         help="lambda_fm for feature-matching loss.")
     parser.add_argument("--lambda-st", type=float, default=LAMBDA_ST,
                         help="lambda_st for self-training.")
+    parser.add_argument("--lambda-semi-st",type=float,default=0.0,
+                        help="lambda_semi_st for self training mask")  
     parser.add_argument("--lambda-semi-adv", type=float, default=LAMBDA_SEMI_ADV,
                         help="lambda_semi_adv for adversarial loss in Generator.")
     parser.add_argument("--lambda-adv-pred", type=float, default=LAMBDA_ADV_PRED,
@@ -207,6 +212,7 @@ def find_good_maps(D_outs, pred_all, device):
     #pdb.set_trace()
     if count > 0:
         print ('Above ST-Threshold : ', count, '/', args.batch_size)
+   
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
         label_sel = torch.Tensor(count, pred_sel.size(2), pred_sel.size(3))
         num_sel = 0 
@@ -479,6 +485,16 @@ def main():
         makedirs(checkpoint_dir)
     print("Checkpoint dst:", checkpoint_dir)
 
+    counts_dir = os.path.join(
+        EXP_OUTPUT_DIR,
+        "counts",
+        args.exp_id,
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
+    )
+
+
     generator_viz_dir = os.path.join(
         EXP_OUTPUT_DIR,
         "generator_viz",
@@ -488,12 +504,20 @@ def main():
         str(args.threshold_st)
     )
     if not os.path.exists(generator_viz_dir):
-        os.makedirs(generator_viz_dir)        
+        os.makedirs(generator_viz_dir)
+
+    if not os.path.exists(counts_dir):
+        os.makedirs(counts_dir)
+        
     #import pdb
     #pdb.set_trace()
     #if os.path.exists(checkpoint_dir):
     #    restore_iteration = find_checkpoint(checkpoint_dir)  
-     
+    count_mittal = []
+    count_hung = []
+    semi_ratios = []
+    count_st = 0
+ 
     for i_iter in range(restore_iteration, args.num_steps):
 
         #print(i_iter, "starting training from") 
@@ -503,6 +527,7 @@ def main():
         loss_S_value = 0
         loss_adv_pred_value = 0
         loss_semi_adv_value = 0
+        loss_semi_st_value = 0
 
         optimizer.zero_grad()
         optimizer_D.zero_grad()
@@ -572,7 +597,8 @@ def main():
 
         # find predicted segmentation maps above threshold
         pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain, device) 
-        
+        count_mittal.append(count)       
+        #print("count mittal = ", count_mittal) 
         # save the labels above threshold
        
         if labels_sel.size(0)!=0:
@@ -592,6 +618,36 @@ def main():
         else:
             loss_st = 0.0
 
+        ################################BMVC st loss##########################################
+        D_out_sigmoid = F.sigmoid(D_adv_loss_map).data.cpu().numpy().squeeze(axis=1)
+        semi_ignore_mask = (D_out_sigmoid < args.mask_T)
+
+        semi_gt = pred_remain.data.cpu().numpy().argmax(axis=1)
+        #print(np.shape(semi_gt))
+        semi_gt[semi_ignore_mask] = 255
+
+        semi_ratio = 1.0 - float(semi_ignore_mask.sum())/semi_ignore_mask.size
+        
+        print('semi ratio: {:.4f}'.format(semi_ratio))
+        semi_ratios.append(semi_ratio)
+        #print("semi ratios = ", semi_ratios)       
+
+        
+        if semi_ratio == 0.0:
+            loss_semi_st_value += 0
+            count_st = 0
+        else:
+            semi_gt = torch.FloatTensor(semi_gt)
+            count_st = count_st + 1
+            loss_semi_st = args.lambda_semi_st * loss_calc(pred_remain, semi_gt, device)
+	    
+            loss_semi_st_value += args.lambda_semi_st*loss_semi_st
+            loss_semi_adv_value += args.lambda_semi_adv*loss_semi_adv
+	    
+            loss_semi_st += args.lambda_semi_adv*loss_semi_adv
+            loss_semi_st.backward(retain_graph=True)         
+        count_hung.append(count_st)
+        #print("count_hung = ", count_hung)
         # Concatenates the input images and ground-truth maps for the Discrimator 'Real' input
         try:
             batch_gt = next(trainloader_gt_iter)
@@ -614,16 +670,15 @@ def main():
         loss_fm = torch.mean(torch.abs(torch.mean(D_out_y_gt, 0) - torch.mean(D_out_y_pred, 0)))
     
         if count > 0 and i_iter > 0: # if any good predictions found for self-training loss
-            loss_S = loss_ce +  args.lambda_fm*loss_fm + args.lambda_st*loss_st + args.lambda_adv_pred * loss_adv_pred + args.lambda_semi_adv*loss_semi_adv
+            loss_S = loss_ce +  args.lambda_fm*loss_fm + args.lambda_st*loss_st + args.lambda_adv_pred * loss_adv_pred
         else:
-            loss_S = loss_ce + args.lambda_fm*loss_fm + args.lambda_adv_pred * loss_adv_pred + args.lambda_semi_adv*loss_semi_adv
+            loss_S = loss_ce + args.lambda_fm*loss_fm + args.lambda_adv_pred * loss_adv_pred
 
         loss_S.backward()
         loss_fm_value+= args.lambda_fm*loss_fm
         loss_adv_pred_value += args.lambda_adv_pred * loss_adv_pred
         loss_ce_value += loss_ce.item()
         loss_S_value += loss_S.item()
-        loss_semi_adv_value += args.lambda_semi_adv*loss_semi_adv
 
         # train D
         for param in model_D.parameters():
@@ -702,6 +757,17 @@ def main():
             print ('saving checkpoint  ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'.pth'))
             torch.save(model_D.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(i_iter)+'_D.pth'))
+
+    count_mittal = np.array(count_mittal)
+    count_hung = np.array(count_hung)
+    semi_ratios = np.array(semi_ratios)
+
+    np.save(os.path.join(counts_dir, 'count_mittal.npy'), count_mittal)
+    np.save(os.path.join(counts_dir, 'count_hung.npy'), count_hung)
+    np.save(os.path.join(counts_dir, 'semi_ratios.npy'), semi_ratios)
+
+
+
 
     end = timeit.default_timer()
     print (end-start,'seconds')
