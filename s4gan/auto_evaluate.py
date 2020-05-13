@@ -261,7 +261,7 @@ def main():
 
     max_mean_iou = 0.0
     max_crf_mean_iou = 0.0
-    for epoch in range(start,end,step):        
+    for epoch in range(start,end+1,step):        
         if not os.path.exists(args.save_dir):
             os.makedirs(args.save_dir)
 
@@ -427,12 +427,13 @@ def main():
                 best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
                 print("CRF Scores saved at: ",best_score_filename_crf)
 
-    with open(best_scores_filename_crf, "w") as f:
+    with open(best_score_filename, "w") as f:
         json.dump(best_score_filename, f, indent=4, sort_keys=True)
 
 
-    with open(best_scores_filename, "w") as f:
-        json.dump(best_score_filename_crf, f, indent=4, sort_keys=True)
+    if args.crf:
+        with open(best_score_filename_crf, "w") as f:
+            json.dump(best_score_filename_crf, f, indent=4, sort_keys=True)
 
 
 if __name__ == '__main__':
