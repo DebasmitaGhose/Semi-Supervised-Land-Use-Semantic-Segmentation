@@ -57,10 +57,13 @@ class BCEWithLogitsLoss2d(nn.Module):
         assert predict.size(2) == target.size(2), "{0} vs {1} ".format(predict.size(2), target.size(2))
         assert predict.size(3) == target.size(3), "{0} vs {1} ".format(predict.size(3), target.size(3))
         n, c, h, w = predict.size()
+        #print(predict.size(), 'predict')
+        #print(target.size(), 'target')
         target_mask = (target >= 0) * (target != self.ignore_label)
         target = target[target_mask]
         if not target.data.dim():
             return Variable(torch.zeros(1))
         predict = predict[target_mask]
         loss = F.binary_cross_entropy_with_logits(predict, target, weight=weight, size_average=self.size_average)
+        #print(loss, 'loss')
         return loss

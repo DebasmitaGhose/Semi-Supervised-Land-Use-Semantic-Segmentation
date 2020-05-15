@@ -17,12 +17,13 @@ import pickle
 from packaging import version
 
 from model.deeplab import Res_Deeplab
+from model import *
 from model.discriminator import FCDiscriminator
 from utils.loss import CrossEntropy2d, BCEWithLogitsLoss2d
 from dataset.voc_dataset import VOCDataSet, VOCGTDataSet
+from dataset.ucm_dataset import UCMDataSet
 
-
-
+from utils.lr_scheduler import PolynomialLR
 import matplotlib.pyplot as plt
 import random
 import timeit
@@ -34,25 +35,25 @@ MODEL = 'DeepLab'
 BATCH_SIZE = 10
 ITER_SIZE = 1
 NUM_WORKERS = 4
-DATA_DIRECTORY = './dataset/VOC2012'
-DATA_LIST_PATH = './dataset/voc_list/train_aug.txt'
+DATA_DIRECTORY = '/home/amth_dg777/project/Satellite_Images'
+DATA_LIST_PATH = '/home/amth_dg777/project/Satellite_Images/ImageSets/train.txt'
 IGNORE_LABEL = 255
 INPUT_SIZE = '321,321'
 LEARNING_RATE = 2.5e-4
 MOMENTUM = 0.9
-NUM_CLASSES = 21
+NUM_CLASSES = 18
 NUM_STEPS = 20000
 POWER = 0.9
 RANDOM_SEED = 1234
-RESTORE_FROM = 'http://vllab1.ucmerced.edu/~whung/adv-semi-seg/resnet101COCO-41f33a49.pth'
+RESTORE_FROM = 'checkpoints/ucm/checkpoint_final.pth'
 SAVE_NUM_IMAGES = 2
 SAVE_PRED_EVERY = 5000
 SNAPSHOT_DIR = './snapshots/'
 WEIGHT_DECAY = 0.0005
-
+LR_DECAY = 10
 LEARNING_RATE_D = 1e-4
 LAMBDA_ADV_PRED = 0.1
-
+ITER_MAX=20000
 PARTIAL_DATA=0.5
 
 SEMI_START=5000
@@ -64,6 +65,9 @@ SEMI_START_ADV=0
 D_REMAIN=True
 
 
+DATASET = 'ucm'
+
+
 def get_arguments():
     """Parse all the arguments provided from the CLI.
 
@@ -71,6 +75,8 @@ def get_arguments():
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
+    parser.add_argument('--dataset', type=str, default=DATASET,
+                        help="dataset to train on")
     parser.add_argument("--model", type=str, default=MODEL,
                         help="available options : DeepLab/DRN")
     parser.add_argument("--batch-size", type=int, default=BATCH_SIZE,
@@ -145,6 +151,19 @@ def get_arguments():
 
 args = get_arguments()
 
+
+def get_device(cuda):
+    cuda = cuda and torch.cuda.is_available()
+    print(torch.cuda.is_available(), 'cuda available')
+    device = torch.device("cuda" if cuda else "cpu")
+    if cuda:
+        print("Device:")
+        for i in range(torch.cuda.device_count()):
+            print("    {}:".format(i), torch.cuda.get_device_name(i))
+    else:
+        print("Device: CPU")
+    return device
+
 def loss_calc(pred, label, gpu):
     """
     This function returns cross entropy loss for semantic segmentation
@@ -156,6 +175,28 @@ def loss_calc(pred, label, gpu):
 
     return criterion(pred, label)
 
+
+
+def get_params(model, key):
+    # For Dilated FCN
+    if key == "1x":
+        for m in model.named_modules():
+            if "layer" in m[0]:
+                if isinstance(m[1], nn.Conv2d):
+                    for p in m[1].parameters():
+                        yield p
+    # For conv weight in the ASPP module
+    if key == "10x":
+        for m in model.named_modules():
+            if "aspp" in m[0]:
+                if isinstance(m[1], nn.Conv2d):
+                    yield m[1].weight
+    # For conv bias in the ASPP module
+    if key == "20x":
+        for m in model.named_modules():
+            if "aspp" in m[0]:
+                if isinstance(m[1], nn.Conv2d):
+                    yield m[1].bias
 
 def lr_poly(base_lr, iter, max_iter, power):
     return base_lr*((1-float(iter)/max_iter)**(power))
@@ -197,9 +238,10 @@ def main():
 
     cudnn.enabled = True
     gpu = args.gpu
-
+    #device = get_device(cuda)
     # create network
-    model = Res_Deeplab(num_classes=args.num_classes)
+    #model = Res_Deeplab(num_classes=args.num_classes)
+    model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
 
     # load pretrained parameters
     if args.restore_from[:4] == 'http' :
@@ -210,13 +252,14 @@ def main():
     # only copy the params that exist in current model (caffe-like)
     new_params = model.state_dict().copy()
     for name, param in new_params.items():
-        print name
+        print(name)
         if name in saved_state_dict and param.size() == saved_state_dict[name].size():
             new_params[name].copy_(saved_state_dict[name])
             print('copy {}'.format(name))
     model.load_state_dict(new_params)
 
-
+    model = nn.DataParallel(model)
+    #model = model.to(gpu)
     model.train()
     model.cuda(args.gpu)
 
@@ -233,20 +276,24 @@ def main():
     if not os.path.exists(args.snapshot_dir):
         os.makedirs(args.snapshot_dir)
 
+    if args.dataset == 'voc':
+        train_dataset = VOCDataSet(args.data_dir, args.data_list, crop_size=input_size,
+                        scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
 
-    train_dataset = VOCDataSet(args.data_dir, args.data_list, crop_size=input_size,
-                    scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
+        train_dataset_size = len(train_dataset)
 
-    train_dataset_size = len(train_dataset)
-
-    train_gt_dataset = VOCGTDataSet(args.data_dir, args.data_list, crop_size=input_size,
-                       scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
+        train_gt_dataset = VOCGTDataSet(args.data_dir, args.data_list, crop_size=input_size,
+                           scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
+    elif args.dataset == 'ucm':
+        train_dataset = UCMDataSet(args.data_dir, args.data_list, crop_size=input_size,
+                        scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
+        train_dataset_size = len(train_dataset)
 
     if args.partial_data is None:
         trainloader = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, shuffle=True, num_workers=5, pin_memory=True)
 
-        trainloader_gt = data.DataLoader(train_gt_dataset,
+        trainloader_gt = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, shuffle=True, num_workers=5, pin_memory=True)
     else:
         #sample partial data
@@ -256,7 +303,7 @@ def main():
             train_ids = pickle.load(open(args.partial_id))
             print('loading train ids from {}'.format(args.partial_id))
         else:
-            train_ids = range(train_dataset_size)
+            train_ids = np.arange(train_dataset_size)
             np.random.shuffle(train_ids)
 
         pickle.dump(train_ids, open(osp.join(args.snapshot_dir, 'train_id.pkl'), 'wb'))
@@ -269,22 +316,52 @@ def main():
                         batch_size=args.batch_size, sampler=train_sampler, num_workers=3, pin_memory=True)
         trainloader_remain = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, sampler=train_remain_sampler, num_workers=3, pin_memory=True)
-        trainloader_gt = data.DataLoader(train_gt_dataset,
+        trainloader_gt = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=3, pin_memory=True)
 
-        trainloader_remain_iter = enumerate(trainloader_remain)
+        trainloader_remain_iter = iter(trainloader_remain)
 
 
-    trainloader_iter = enumerate(trainloader)
-    trainloader_gt_iter = enumerate(trainloader_gt)
+    trainloader_iter = iter(trainloader)
+    trainloader_gt_iter = iter(trainloader_gt)
 
 
     # implement model.optim_parameters(args) to handle different models' lr setting
-
+    '''
     # optimizer for segmentation network
     optimizer = optim.SGD(model.optim_parameters(args),
                 lr=args.learning_rate, momentum=args.momentum,weight_decay=args.weight_decay)
     optimizer.zero_grad()
+    '''
+    optimizer = torch.optim.SGD(
+        # cf lr_mult and decay_mult in train.prototxt
+        params=[
+            {
+                "params": get_params(model.module, key="1x"),
+                "lr": LEARNING_RATE,
+                "weight_decay": WEIGHT_DECAY,
+            },
+            {
+                "params": get_params(model.module, key="10x"),
+                "lr": 10 * LEARNING_RATE,
+                "weight_decay": WEIGHT_DECAY,
+            },
+            {
+                "params": get_params(model.module, key="20x"),
+                "lr": 20 * LEARNING_RATE,
+                "weight_decay": 0.0,
+            },
+        ],
+        momentum=MOMENTUM,
+    )
+
+    # Learning rate scheduler
+    scheduler = PolynomialLR(
+        optimizer=optimizer,
+        step_size=LR_DECAY,
+        iter_max=ITER_MAX,
+        power=POWER,
+    )
 
     # optimizer for discriminator network
     optimizer_D = optim.Adam(model_D.parameters(), lr=args.learning_rate_D, betas=(0.9,0.99))
@@ -329,29 +406,35 @@ def main():
             # do semi first
             if (args.lambda_semi > 0 or args.lambda_semi_adv > 0 ) and i_iter >= args.semi_start_adv :
                 try:
-                    _, batch = trainloader_remain_iter.next()
+                    batch = next(trainloader_remain_iter)
                 except:
-                    trainloader_remain_iter = enumerate(trainloader_remain)
-                    _, batch = trainloader_remain_iter.next()
+                    trainloader_remain_iter = iter(trainloader_remain)
+                    batch = next(trainloader_remain_iter)
 
                 # only access to img
-                images, _, _, _ = batch
+                images, _, _, _, _= batch
+                #print(np.shape(images))
                 images = Variable(images).cuda(args.gpu)
 
 
                 pred = interp(model(images))
+                #print(np.shape(pred))
                 pred_remain = pred.detach()
 
                 D_out = interp(model_D(F.softmax(pred)))
+                #print(np.shape(D_out))
                 D_out_sigmoid = F.sigmoid(D_out).data.cpu().numpy().squeeze(axis=1)
 
                 ignore_mask_remain = np.zeros(D_out_sigmoid.shape).astype(np.bool)
 
                 loss_semi_adv = args.lambda_semi_adv * bce_loss(D_out, make_D_label(gt_label, ignore_mask_remain))
-                loss_semi_adv = loss_semi_adv/args.iter_size
+                #print(loss_semi_adv, 'loss semi adv')
+                loss_semi_adv = loss_semi_adv/float(args.iter_size)
+                #print(loss_semi_adv)
+                #print(loss_semi_adv.data.cpu().numpy(), 'error')
 
                 #loss_semi_adv.backward()
-                loss_semi_adv_value += loss_semi_adv.data.cpu().numpy()[0]/args.lambda_semi_adv
+                loss_semi_adv_value += loss_semi_adv.data.cpu().numpy()/float(args.lambda_semi_adv)
 
                 if args.lambda_semi <= 0 or i_iter < args.semi_start:
                     loss_semi_adv.backward()
@@ -384,12 +467,12 @@ def main():
             # train with source
 
             try:
-                _, batch = trainloader_iter.next()
+                batch = next(trainloader_iter)
             except:
-                trainloader_iter = enumerate(trainloader)
-                _, batch = trainloader_iter.next()
+                trainloader_iter = iter(trainloader)
+                batch = next(trainloader_iter)
 
-            images, labels, _, _ = batch
+            images, labels, _, _, _ = batch
             images = Variable(images).cuda(args.gpu)
             ignore_mask = (labels.numpy() == 255)
             pred = interp(model(images))
@@ -405,8 +488,8 @@ def main():
             # proper normalization
             loss = loss/args.iter_size
             loss.backward()
-            loss_seg_value += loss_seg.data.cpu().numpy()[0]/args.iter_size
-            loss_adv_pred_value += loss_adv_pred.data.cpu().numpy()[0]/args.iter_size
+            loss_seg_value += loss_seg.data.cpu().numpy()/args.iter_size
+            loss_adv_pred_value += loss_adv_pred.data.cpu().numpy()/args.iter_size
 
 
             # train D
@@ -426,18 +509,18 @@ def main():
             loss_D = bce_loss(D_out, make_D_label(pred_label, ignore_mask))
             loss_D = loss_D/args.iter_size/2
             loss_D.backward()
-            loss_D_value += loss_D.data.cpu().numpy()[0]
+            loss_D_value += loss_D.data.cpu().numpy()
 
 
             # train with gt
             # get gt labels
             try:
-                _, batch = trainloader_gt_iter.next()
+                batch = next(trainloader_gt_iter)
             except:
-                trainloader_gt_iter = enumerate(trainloader_gt)
-                _, batch = trainloader_gt_iter.next()
+                trainloader_gt_iter = iter(trainloader_gt)
+                batch = next(trainloader_gt_iter)
 
-            _, labels_gt, _, _ = batch
+            _, labels_gt, _, _, _ = batch
             D_gt_v = Variable(one_hot(labels_gt)).cuda(args.gpu)
             ignore_mask_gt = (labels_gt.numpy() == 255)
 
@@ -445,7 +528,7 @@ def main():
             loss_D = bce_loss(D_out, make_D_label(gt_label, ignore_mask_gt))
             loss_D = loss_D/args.iter_size/2
             loss_D.backward()
-            loss_D_value += loss_D.data.cpu().numpy()[0]
+            loss_D_value += loss_D.data.cpu().numpy()
 
 
 
@@ -456,18 +539,18 @@ def main():
         print('iter = {0:8d}/{1:8d}, loss_seg = {2:.3f}, loss_adv_p = {3:.3f}, loss_D = {4:.3f}, loss_semi = {5:.3f}, loss_semi_adv = {6:.3f}'.format(i_iter, args.num_steps, loss_seg_value, loss_adv_pred_value, loss_D_value, loss_semi_value, loss_semi_adv_value))
 
         if i_iter >= args.num_steps-1:
-            print 'save model ...'
+            print('save model ...')
             torch.save(model.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(args.num_steps)+'.pth'))
             torch.save(model_D.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(args.num_steps)+'_D.pth'))
             break
 
         if i_iter % args.save_pred_every == 0 and i_iter!=0:
-            print 'taking snapshot ...'
+            print('taking snapshot ...')
             torch.save(model.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(i_iter)+'.pth'))
             torch.save(model_D.state_dict(),osp.join(args.snapshot_dir, 'VOC_'+str(i_iter)+'_D.pth'))
 
     end = timeit.default_timer()
-    print end-start,'seconds'
+    print(end-start,'seconds')
 
 if __name__ == '__main__':
     main()
