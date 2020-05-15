@@ -670,9 +670,11 @@ def main():
         loss_fm = torch.mean(torch.abs(torch.mean(D_out_y_gt, 0) - torch.mean(D_out_y_pred, 0)))
     
         if count > 0 and i_iter > 0: # if any good predictions found for self-training loss
-            loss_S = loss_ce +  args.lambda_fm*loss_fm + args.lambda_st*loss_st + args.lambda_adv_pred * loss_adv_pred
+            #loss_S = loss_ce +  args.lambda_fm*loss_fm + args.lambda_st*loss_st + args.lambda_adv_pred * loss_adv_pred
+            loss_S = loss_ce +  args.lambda_adv_pred * loss_adv_pred
         else:
-            loss_S = loss_ce + args.lambda_fm*loss_fm + args.lambda_adv_pred * loss_adv_pred
+            #loss_S = loss_ce + args.lambda_fm*loss_fm + args.lambda_adv_pred * loss_adv_pred
+            loss_S = loss_ce + args.lambda_adv_pred * loss_adv_pred
 
         loss_S.backward()
         loss_fm_value+= args.lambda_fm*loss_fm
@@ -714,7 +716,8 @@ def main():
         
         loss_spatial_D = (loss_spatial_D_fake + loss_spatial_D_real)/2.0
    
-        loss_D = loss_D + loss_spatial_D
+        #loss_D = loss_D + loss_spatial_D
+        loss_D = loss_spatial_D
         # backprop
         loss_D.backward()
         loss_D_value += loss_D.item()
