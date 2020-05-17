@@ -31,7 +31,7 @@ DATA_LIST_PATH = '../../Satellite_Images/ImageSets/test.txt'
 IGNORE_LABEL = 255
 NUM_CLASSES = 18
 NUM_STEPS = 1449 # Number of images in the validation set.
-RESTORE_FROM = 'snapshots/VOC_10000.pth'
+RESTORE_FROM = 'snapshots/VOC_15000.pth'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 
@@ -268,7 +268,7 @@ def main():
         #color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
         #color_file.save(filename)
 
-        # show_all(gt, output)
+        show_all(gt, output)
         gt_list.append(gt)
         output_list.append(output)
         data_list.append([gt.flatten(), output.flatten()])
