@@ -80,6 +80,8 @@ rse all the arguments provided from the CLI.
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
+    parser.add_argument("--active-learning",type=bool,default="True",
+                        help="whether ro use active learning to select labeled examples")
     parser.add_argument("--dataset-split",type=str,default="train",
                         help="train,val,test,subset")
     parser.add_argument("--exp-id",type=str,default=EXP_ID,
@@ -374,6 +376,14 @@ def main():
         trainloader_remain = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
         trainloader_remain_iter = iter(trainloader_remain)
+
+    elif args.active_learning:
+        active_ucm_dataloader = data.DataLoader(train_dataset,
+                    batch_size=1679, shuffle=True, num_workers=0, pin_memory=True)#1679
+        X_train, y_train, _, names, _ = next(iter(active_ucm_dataloader))
+        names_arr=np.array(names)
+        np.save('names',names_arr)
+
 
     else:
         partial_size = int(args.labeled_ratio * train_dataset_size)
