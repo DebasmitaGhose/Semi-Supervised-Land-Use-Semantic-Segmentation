@@ -70,6 +70,7 @@ EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscap
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
 EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
+SAMPLING_TYPE = "uncertainty"
 
 def get_arguments():
     """Pt '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
@@ -80,8 +81,10 @@ rse all the arguments provided from the CLI.
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
-    parser.add_argument("--active-learning",type=bool,default="True",
-                        help="whether ro use active learning to select labeled examples")
+    parser.add_argument("--active-learning",type=bool,default=False,
+                        help="whether to use active learning to select labeled examples")
+    parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
+                        help="sampling technique to use")
     parser.add_argument("--dataset-split",type=str,default="train",
                         help="train,val,test,subset")
     parser.add_argument("--exp-id",type=str,default=EXP_ID,
@@ -142,6 +145,8 @@ rse all the arguments provided from the CLI.
 
 args = get_arguments()
 
+np.random.seed(args.random_seed)
+
 def get_device(cuda):
     cuda = cuda and torch.cuda.is_available()
     print(torch.cuda.is_available(), 'cuda available')
@@ -201,8 +206,8 @@ def find_good_maps(D_outs, pred_all, device):
             count +=1
             indexes.append(i)
              
-    import pdb
-    pdb.set_trace()
+    #import pdb
+    #pdb.set_trace()
     if count > 0:
         print ('Above ST-Threshold : ', count, '/', args.batch_size)
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
@@ -286,7 +291,7 @@ def main():
         str(args.labeled_ratio),
         str(args.threshold_st)
     )
-    if os.path.exists(checkpoint_dir):
+    if os.path.exists(checkpoint_dir) and  len(os.listdir(checkpoint_dir))!=0:
         print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
@@ -376,24 +381,36 @@ def main():
         trainloader_remain = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
         trainloader_remain_iter = iter(trainloader_remain)
-
-    elif args.active_learning:
+    
+    elif args.active_learning == True:
+        #import pdb
+        #pdb.set_trace()
+        train_ids = np.arange(train_dataset_size)
+        np.random.shuffle(train_ids)
         active_ucm_dataloader = data.DataLoader(train_dataset,
-                    batch_size=1679, shuffle=True, num_workers=0, pin_memory=True)#1679
+                    batch_size=8, shuffle=True, num_workers=0, pin_memory=True)#1679
         X_train, y_train, _, names, _ = next(iter(active_ucm_dataloader))
+        partial_size = int(args.labeled_ratio * train_dataset_size)
+        
+        if args.sampling_type == "uncertainty":
+            ranked_list = np.load('uncertainity_sampling_names.npy')
+            #print(ranked_list)
+            print("henlo")
+            
         names_arr=np.array(names)
         np.save('names',names_arr)
-
-
+    
     else:
+        import pdb
+        #pdb.set_trace()
         partial_size = int(args.labeled_ratio * train_dataset_size)
-        #print(partial_size, "partial size")        
+        print(partial_size, "partial size")        
         train_ids = np.arange(train_dataset_size)
-        #print(train_ids, "train ids")
+        print(train_ids, "train ids")
         np.random.shuffle(train_ids)
        
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
-        train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
+        train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size]) #############IMPORTANT patial_size:
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
 
         trainloader = data.DataLoader(train_dataset,

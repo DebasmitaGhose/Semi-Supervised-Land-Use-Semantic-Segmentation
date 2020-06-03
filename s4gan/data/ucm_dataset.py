@@ -45,7 +45,9 @@ class UCMDataSet(data.Dataset):
         return image, label
 
     def __getitem__(self, index):
-        #print(index)
+        #import pdb
+        #pdb.set_trace()
+        print(index, 'index')
         datafiles = self.files[index]
         #print(datafiles["img"], "datafiles")
         #image = cv2.imread(datafiles["img"], cv2.IMREAD_COLOR)
