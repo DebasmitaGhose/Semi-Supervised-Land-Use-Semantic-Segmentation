@@ -11,7 +11,7 @@ from torch.utils import data
 from PIL import Image
 
 class UCMDataSet(data.Dataset):
-    def __init__(self, root, list_path, max_iters=None, crop_size=(321, 321), mean=(128, 128, 128), scale=True, mirror=True, ignore_label=255):
+    def __init__(self, root, list_path, al_flag, labeled_ratio, sampling_type, max_iters=None, crop_size=(321, 321), mean=(128, 128, 128), scale=True, mirror=True, ignore_label=255):
         self.root = root
         self.list_path = list_path
         self.crop_h, self.crop_w = crop_size
@@ -20,6 +20,13 @@ class UCMDataSet(data.Dataset):
         self.mean = mean
         self.is_mirror = mirror
         self.img_ids = [i_id.strip() for i_id in open(list_path)]
+        self.al_flag = al_flag
+        self.labeled_ratio = labeled_ratio
+        self.sampling_type = sampling_type
+        if al_flag == True:
+            self.list_path = self.sampling_type + '/' + self.sampling_type + '_' + str(self.labeled_ratio) + '.txt'
+            print(self.list_path)
+            self.img_ids = [i_id.strip() for i_id in open(self.list_path)]
         if not max_iters==None:
 	        self.img_ids = self.img_ids * int(np.ceil(float(max_iters) / len(self.img_ids)))
         self.files = []
@@ -32,6 +39,13 @@ class UCMDataSet(data.Dataset):
                 "label": label_file,
                 "name": name
             })
+        #if al_flag == True:
+            #self.list_path = '../'+ self.sampling_type + '/' + self.sampling_type + '_' + str(self.labeled_ratio) + '.txt'
+            #print(self.list_path)
+            #self.img_ids = [i_id.strip() for i_id in open(self.list_path)]
+
+
+
         #print('len of file list',len(self.files))
         #print('labels',self.files)
 

@@ -348,7 +348,7 @@ def main():
         #train_gt_dataset = VOCGTDataSet(args.data_dir, args.data_list, crop_size=input_size,
                         #scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
     elif args.dataset == 'ucm':
-        train_dataset = UCMDataSet(args.data_dir, args.data_list, crop_size=input_size,
+        train_dataset = UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=input_size,
                         scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
 
     elif args.dataset == 'pascal_context':

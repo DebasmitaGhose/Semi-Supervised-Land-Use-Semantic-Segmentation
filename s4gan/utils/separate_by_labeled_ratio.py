@@ -21,6 +21,3 @@ for item in labeled_ratio_dict.items():
     print(np.shape(names_lab_rat))  
     text_file_name = os.path.join(save_dir, sampling_technique + '_' + lab_rat + '.txt')  
     np.savetxt(text_file_name, names_lab_rat,  newline="\n", fmt="%s")
-    #text_file = open(text_file_name, "w")
-    #text_file.write(names_lab_rat)
-    #text_file.close()
