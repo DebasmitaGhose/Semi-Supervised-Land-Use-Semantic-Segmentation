@@ -382,7 +382,7 @@ def main():
         img_names = [i_id.strip() for i_id in open(args.data_list)]
         img_names = np.array(img_names)
         s4gan_names = img_names[train_ids]
-        print(s4gan_names)
+        #print(s4gan_names)
         np.save('s4gan_names_with_seed',s4gan_names)
 
 
@@ -437,9 +437,9 @@ def main():
         import pdb
         #pdb.set_trace()
         partial_size = int(args.labeled_ratio * train_dataset_size)
-        print(partial_size, "partial size")        
+        #print(partial_size, "partial size")        
         train_ids = np.arange(train_dataset_size)
-        print(train_ids, "train ids")
+        #print(train_ids, "train ids")
         np.random.shuffle(train_ids)
        
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -508,8 +508,8 @@ def main():
     y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).to(device)), Variable(torch.zeros(args.batch_size, 1).to(device))
 
     # Setup loss logger
-    writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
-    average_loss = MovingAverageValueMeter(20)
+    #writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
+    #average_loss = MovingAverageValueMeter(20)
 
     # Path to save models
     checkpoint_dir = os.path.join(
@@ -588,7 +588,7 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         except:
             trainloader_remain_iter = iter(trainloader_remain)
-            print(next(trainloader_remain_iter), "trainloader remain iter")
+            #print(next(trainloader_remain_iter), "trainloader remain iter")
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
@@ -685,7 +685,7 @@ def main():
         scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value)) 
-        
+        '''
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
             writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
@@ -706,7 +706,7 @@ def main():
                 writer.add_histogram(
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
-
+        '''
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
