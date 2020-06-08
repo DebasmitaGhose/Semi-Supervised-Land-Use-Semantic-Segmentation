@@ -81,6 +81,8 @@ rse all the arguments provided from the CLI.
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
+    parser.add_argument("--save-s4gan-names",type=bool,default=False,
+                        help="save s4gan names")
     parser.add_argument("--active-learning",type=bool,default=False,
                         help="whether to use active learning to select labeled examples")
     parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
@@ -371,7 +373,21 @@ def main():
     train_dataset_size = len(train_dataset)
     print ('dataset size: ', train_dataset_size)
 
+    if args.save_s4gan_names is True:    
+        #import pdb
+        #pdb.set_trace()
+        
+        train_ids = np.arange(train_dataset_size)
+        np.random.shuffle(train_ids)
+        img_names = [i_id.strip() for i_id in open(args.data_list)]
+        img_names = np.array(img_names)
+        s4gan_names = img_names[train_ids]
+        print(s4gan_names)
+        np.save('s4gan_names_with_seed',s4gan_names)
+
+
     if args.labeled_ratio is None:
+
         trainloader = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
 
@@ -382,25 +398,42 @@ def main():
                         batch_size=args.batch_size, shuffle=True, num_workers=0, pin_memory=True)
         trainloader_remain_iter = iter(trainloader_remain)
     
+
     elif args.active_learning == True:
-        #import pdb
-        #pdb.set_trace()
-        train_ids = np.arange(train_dataset_size)
-        np.random.shuffle(train_ids)
-        active_ucm_dataloader = data.DataLoader(train_dataset,
-                    batch_size=8, shuffle=True, num_workers=0, pin_memory=True)#1679
-        X_train, y_train, _, names, _ = next(iter(active_ucm_dataloader))
-        partial_size = int(args.labeled_ratio * train_dataset_size)
+ 
+        active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
+        active_img_names = [i_id.strip() for i_id in open(active_list_path)]
+        all_img_names  = [i_id.strip() for i_id in open(args.data_list)]  
         
-        if args.sampling_type == "uncertainty":
-            ranked_list = np.load('uncertainity_sampling_names.npy')
-            #print(ranked_list)
-            print("henlo")
-            
-        names_arr=np.array(names)
-        np.save('names',names_arr)
-    
+        active_img_names = np.array(active_img_names)
+        all_img_names = np.array(all_img_names)
+        '''
+        numpy.isin(element, test_elements, assume_unique=False, invert=False)
+        Calculates element in test_elements, broadcasting over element only. 
+        Returns a boolean array of the same shape as element that is True 
+        where an element of element is in test_elements and False otherwise. 
+        '''
+        active_ids  = np.where(np.isin(all_img_names,active_img_names))#np.isin will return a boolean array of size all_image_names.
+        active_ids = active_ids[0]
+        
+        train_ids = np.arange(train_dataset_size)
+        remaining_ids = np.delete(train_ids, active_ids)
+        
+        train_sampler = data.sampler.SubsetRandomSampler(active_ids)
+        train_remain_sampler = data.sampler.SubsetRandomSampler(remaining_ids) #############IMPORTANT patial_size:
+        train_gt_sampler = data.sampler.SubsetRandomSampler(active_ids)
+ 
+        
+        trainloader = data.DataLoader(train_dataset,
+                         batch_size=args.batch_size, sampler=train_sampler, num_workers=0, pin_memory=True)
+        trainloader_remain = data.DataLoader(train_dataset,
+                        batch_size=args.batch_size, sampler=train_remain_sampler, num_workers=0, pin_memory=True)
+        trainloader_gt = data.DataLoader(train_dataset,
+                        batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=0, pin_memory=True)
+  
+       
     else:
+
         import pdb
         #pdb.set_trace()
         partial_size = int(args.labeled_ratio * train_dataset_size)
@@ -410,7 +443,7 @@ def main():
         np.random.shuffle(train_ids)
        
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
-        train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size]) #############IMPORTANT patial_size:
+        train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:]) #############IMPORTANT patial_size:
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
 
         trainloader = data.DataLoader(train_dataset,
