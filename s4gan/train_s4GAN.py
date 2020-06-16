@@ -60,7 +60,7 @@ WEIGHT_DECAY = 0.0005
 ITER_MAX = 20000
 MOMENTUM = 0.9
 NUM_WORKERS = 0
-RANDOM_SEED = 1234
+RANDOM_SEED = 0
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
@@ -140,6 +140,8 @@ def get_arguments():
     return parser.parse_args()
 
 args = get_arguments()
+
+np.random.seed(args.random_seed)
 
 def get_device(cuda):
     cuda = cuda and torch.cuda.is_available()
