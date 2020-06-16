@@ -51,6 +51,9 @@ CRF_BI_XY_STD = 1
 CRF_BI_RGB_STD = 67
 CRF_BI_W = 4
 
+SAMPLING_TYPE = 'uncertainty'
+
+
 def get_arguments():
     """Parse all the arguments provided from the CLI.
     
@@ -58,6 +61,10 @@ def get_arguments():
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="VOC evaluation script")
+    parser.add_argument("--active-learning",type=bool,default=False,
+                        help="whether to use active learning to select labeled examples")
+    parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
+                        help="sampling technique to use")
     parser.add_argument("--dataset-split", type=str, default="test",
                         help="train,val,test,subset")
     parser.add_argument("--exp-id", type=str, default=EXP_ID,
@@ -305,12 +312,13 @@ def main():
         interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
     elif args.dataset == 'ucm':
-        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
-                                    batch_size=1, shuffle=False, pin_memory=True)
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),                                     batch_size=1, shuffle=False, pin_memory=True)
+
         interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
         if args.crf:
-            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
-                                        batch_size=1, shuffle=False, pin_memory=True)
+            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
+                                    batch_size=1, shuffle=False, pin_memory=True)
+
             interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
 
 
