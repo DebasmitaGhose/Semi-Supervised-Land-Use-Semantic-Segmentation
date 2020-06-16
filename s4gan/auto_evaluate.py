@@ -51,6 +51,8 @@ CRF_BI_XY_STD = 1
 CRF_BI_RGB_STD = 67
 CRF_BI_W = 4
 
+SAMPLING_TYPE = 'uncertainty'
+
 def get_arguments():
     """Parse all the arguments provided from the CLI.
     
@@ -58,6 +60,10 @@ def get_arguments():
       A list of parsed arguments.
     """
     parser = argparse.ArgumentParser(description="VOC evaluation script")
+    parser.add_argument("--active-learning",type=bool,default=False,
+                        help="whether to use active learning to select labeled examples")
+    parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
+                        help="sampling technique to use")
     parser.add_argument("--start-eval", type=int, default=100,
                         help="epoch from which we want to start evaluation")
     parser.add_argument("--end-eval", type=int, default=20000,
@@ -296,7 +302,7 @@ def main():
             interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
         elif args.dataset == 'ucm':
-            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
+            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
             interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
             if args.crf:
@@ -413,8 +419,10 @@ def main():
         mean_iou = score['Mean IoU']
         if mean_iou > max_mean_iou:
             max_mean_iou = mean_iou
+            best_score = score
             best_iteration = epoch
             best_score_filename = os.path.join(scores_dir, "best_scores_" + str(epoch) + ".json")
+            print('best so far...'+ str(mean_iou))
             print("Hey yo!!, Best score found at epoch : " + str(epoch) + "and the score is: " + str(max_mean_iou))
             print("best Scores saved at: ", best_score_filename)
 
@@ -423,17 +431,18 @@ def main():
             crf_mean_iou = score_crf['Mean IoU']
             if crf_mean_iou > max_crf_mean_iou:
                 max_crf_mean_iou = crf_mean_iou
+                best_score_crf = score_crf
                 best_crf_iteration = epoch
                 best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
                 print("CRF Scores saved at: ",best_score_filename_crf)
 
     with open(best_score_filename, "w") as f:
-        json.dump(best_score_filename, f, indent=4, sort_keys=True)
+        json.dump(best_score, f, indent=4, sort_keys=True)
 
 
     if args.crf:
         with open(best_score_filename_crf, "w") as f:
-            json.dump(best_score_filename_crf, f, indent=4, sort_keys=True)
+            json.dump(best_score_crf, f, indent=4, sort_keys=True)
 
 
 if __name__ == '__main__':

@@ -1,8 +1,10 @@
 import numpy as np
 import os
 
-names_file = '../uncertainity_sampling_names.npy'
-sampling_technique = 'uncertainty'
+#names_file = '../uncertainity_sampling_names.npy'
+names_file = '../margin/margin_names.npy'
+#sampling_technique = 'uncertainty'
+sampling_technique = 'margin'
 labeled_ratio_dict = {34:"0.02", 85:"0.05", 211:"0.125", 338:"0.2", 557:"0.33", 845:"0.5", 1267:"0.75"}
 
 names = np.load(names_file)

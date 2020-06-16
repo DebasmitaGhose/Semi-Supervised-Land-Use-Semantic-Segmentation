@@ -83,6 +83,8 @@ rse all the arguments provided from the CLI.
     parser = argparse.ArgumentParser(description="DeepLab-ResNet Network")
     parser.add_argument("--save-s4gan-names",type=bool,default=False,
                         help="save s4gan names")
+    parser.add_argument("--save-after-iter",type=int,default=1000,
+                        help="save predicted maps after this iteration")
     parser.add_argument("--active-learning",type=bool,default=False,
                         help="whether to use active learning to select labeled examples")
     parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
@@ -399,11 +401,13 @@ def main():
         trainloader_remain_iter = iter(trainloader_remain)
     
 
-    elif args.active_learning == True:
+    elif args.active_learning:
  
         active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
         active_img_names = [i_id.strip() for i_id in open(active_list_path)]
+        print(np.shape(active_img_names), 'active image names')
         all_img_names  = [i_id.strip() for i_id in open(args.data_list)]  
+        #print(all_img_names, 'all image names')
         
         active_img_names = np.array(active_img_names)
         all_img_names = np.array(all_img_names)
@@ -414,7 +418,9 @@ def main():
         where an element of element is in test_elements and False otherwise. 
         '''
         active_ids  = np.where(np.isin(all_img_names,active_img_names))#np.isin will return a boolean array of size all_image_names.
+        print(active_ids, 'active ids')
         active_ids = active_ids[0]
+        print(np.shape(active_ids), 'active ids')
         
         train_ids = np.arange(train_dataset_size)
         remaining_ids = np.delete(train_ids, active_ids)
@@ -431,7 +437,8 @@ def main():
         trainloader_gt = data.DataLoader(train_dataset,
                         batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=0, pin_memory=True)
   
-       
+        #print(next(iter(trainloader)), 'trainloader')
+        #print(next(iter(trainloader_remain)), 'remain')       
     else:
 
         import pdb
@@ -441,7 +448,11 @@ def main():
         train_ids = np.arange(train_dataset_size)
         #print(train_ids, "train ids")
         np.random.shuffle(train_ids)
-       
+
+        #print(np.shape(train_ids[:partial_size]), 'train sampler')
+        #print(np.shape(train_ids[partial_size:]), 'train remain sampler')        
+
+
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
         train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:]) #############IMPORTANT patial_size:
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -611,10 +622,12 @@ def main():
         
         # save the labels above threshold
        
-        if labels_sel.size(0)!=0:
+        if labels_sel.size(0)!=0 and i_iter > args.save_after_iter:
             for i in range(count):
                 index = indexes[i]
                 name = names[index]
+                name = name + '_iter_' + str(i_iter)
+                print(name) 
                 gen_viz = labels_sel[i] 
                 #label_selected = labels_sel(i,:,:) 
                 filename = os.path.join(generator_viz_dir, name + ".npy")
@@ -622,7 +635,7 @@ def main():
   
         # training loss on above threshold segmentation predictions (Cross Entropy Loss)IN: 321
 
-        if count > 0 and i_iter > 0:
+        if count > 0 and i_iter > args.save_after_iter:
             #loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
             loss_st = loss_calc(pred_sel, labels_sel, device)
         else:

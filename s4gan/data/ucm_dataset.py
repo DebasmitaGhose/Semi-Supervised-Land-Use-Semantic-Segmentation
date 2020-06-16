@@ -55,7 +55,7 @@ class UCMDataSet(data.Dataset):
     def __getitem__(self, index):
         #import pdb
         #pdb.set_trace()
-        #print(index, 'index')
+        # print(index, 'index')
         datafiles = self.files[index]
         #print(datafiles["img"], "datafiles")
         #image = cv2.imread(datafiles["img"], cv2.IMREAD_COLOR)
@@ -68,6 +68,7 @@ class UCMDataSet(data.Dataset):
         #print(np.min(label), "min label")
         size = image.shape
         name = datafiles["name"]
+        # print(name, 'name in dataloader')
         if self.scale:
             image, label = self.generate_scale_label(image, label)
         image = np.asarray(image, np.float32)
