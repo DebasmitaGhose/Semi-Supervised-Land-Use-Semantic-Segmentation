@@ -70,11 +70,10 @@ EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscap
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
 EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
+SPLIT_ID = None
 
 def get_arguments():
-    """Pt '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
-st '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
-rse all the arguments provided from the CLI.
+    """Parse all the arguments provided from the CLI.
 
     Returns:
       A list of parsed arguments.
@@ -136,6 +135,8 @@ rse all the arguments provided from the CLI.
                         help="Regularisation parameter for L2-loss.")
     parser.add_argument("--cuda", type=bool, default=True,
                         help="choose gpu device.")
+    parser.add_argument("--split-id", type=str, default=SPLIT_ID,
+                        help="split order id")
     return parser.parse_args()
 
 args = get_arguments()
@@ -199,8 +200,8 @@ def find_good_maps(D_outs, pred_all, device):
             count +=1
             indexes.append(i)
              
-    import pdb
-    pdb.set_trace()
+    #import pdb
+    #pdb.set_trace()
     if count > 0:
         print ('Above ST-Threshold : ', count, '/', args.batch_size)
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
@@ -284,7 +285,7 @@ def main():
         str(args.labeled_ratio),
         str(args.threshold_st)
     )
-    if os.path.exists(checkpoint_dir):
+    if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir))!=0:
         print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
@@ -377,11 +378,19 @@ def main():
 
     else:
         partial_size = int(args.labeled_ratio * train_dataset_size)
-        #print(partial_size, "partial size")        
-        train_ids = np.arange(train_dataset_size)
-        #print(train_ids, "train ids")
-        np.random.shuffle(train_ids)
-       
+        #print(partial_size, "partial size")       
+        if args.split_id is not None:
+            train_ids = pickle.load(open(args.split_id, 'rb'))
+            print('loading train ids from {}'.format(args.split_id))
+        else: 
+            train_ids = np.arange(train_dataset_size)
+            #print(train_ids, "train ids")
+            np.random.shuffle(train_ids)
+        
+        print(type(train_ids))
+        pickle.dump(train_ids, open('train_ucm_split.pkl', 'wb'), 0)
+        print('pickled')
+         
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
         train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
