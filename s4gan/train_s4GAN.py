@@ -60,7 +60,7 @@ WEIGHT_DECAY = 0.0005
 ITER_MAX = 20000
 MOMENTUM = 0.9
 NUM_WORKERS = 0
-RANDOM_SEED = 0
+RANDOM_SEED = 1234#0
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
@@ -141,7 +141,7 @@ def get_arguments():
 
 args = get_arguments()
 
-np.random.seed(args.random_seed)
+#np.random.seed(args.random_seed)
 
 def get_device(cuda):
     cuda = cuda and torch.cuda.is_available()
@@ -390,7 +390,8 @@ def main():
             np.random.shuffle(train_ids)
         
         print(type(train_ids))
-        pickle.dump(train_ids, open('train_ucm_split.pkl', 'wb'), 0)
+        pickle_filename = 'train_ucm_split_'+ str(args.labeled_ratio) + '_' + str(args.threshold_st) + '.pkl'
+        pickle.dump(train_ids, open(pickle_filename, 'wb'), 0)
         print('pickled')
          
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -459,8 +460,8 @@ def main():
     y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).to(device)), Variable(torch.zeros(args.batch_size, 1).to(device))
 
     # Setup loss logger
-    writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
-    average_loss = MovingAverageValueMeter(20)
+    #writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
+    #average_loss = MovingAverageValueMeter(20)
 
     # Path to save models
     checkpoint_dir = os.path.join(
@@ -636,7 +637,7 @@ def main():
         scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value)) 
-        
+        ''' 
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
             writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
@@ -657,7 +658,7 @@ def main():
                 writer.add_histogram(
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
-
+        '''
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
