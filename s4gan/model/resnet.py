@@ -71,6 +71,8 @@ class _Bottleneck(nn.Module):
         h = self.reduce(x)
         h = self.conv3x3(h)
         h = self.increase(h)
+        import pdb
+        pdb.set_trace()
         h = self.cbam(h)
         h += self.shortcut(x)
         return F.relu(h)

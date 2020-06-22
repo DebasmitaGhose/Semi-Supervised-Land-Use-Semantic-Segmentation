@@ -288,6 +288,8 @@ def main():
     # create network
     #model = Res_Deeplab(num_classes=args.num_classes)
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
+    import pdb
+    pdb.set_trace()
     # Path to save models
     checkpoint_dir = os.path.join(
         EXP_OUTPUT_DIR,
