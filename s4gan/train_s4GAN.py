@@ -26,18 +26,18 @@ from model import *
 
 from model.discriminator import s4GAN_discriminator
 from utils.loss import CrossEntropy2d
-from data.voc_dataset import VOCDataSet, VOCGTDataSet
+from data.voc_dataset import VOCDataSet, VOCGTDataSet # modify this
 from data import get_loader, get_data_path
 from data.augmentations import *
 from utils.lr_scheduler import PolynomialLR
 start = timeit.default_timer()
 
-DATA_DIRECTORY = '/home/amth_dg777/project/VOCdevkit/VOC2012'
-DATA_LIST_PATH = '/home/amth_dg777/project/VOCdevkit/VOC2012/ImageSets/Segmentation/subset.txt'
+DATA_DIRECTORY = '/home/amth_dg777/project/Satellite_Images'
+DATA_LIST_PATH = '/home/amth_dg777/project/Satellite_Images/ImageSets/train.txt' #subset.txt
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
-NUM_CLASSES = 21 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
-DATASET = 'pascal_voc' #pascal_voc or pascal_context 
+NUM_CLASSES = 17 # 21 for PASCAL-VOC / 60 for PASCAL-Context / 19 Cityscapes 
+DATASET = 'pascal_voc'#'pascal_voc' #pascal_voc or pascal_context 
 
 
 MODEL = 'DeepLab'
@@ -49,6 +49,7 @@ INPUT_SIZE = '321,321'
 IGNORE_LABEL = 255 # 255 for PASCAL-VOC / -1 for PASCAL-Context / 250 for Cityscapes
 
 RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'
+#RESTORE_FROM = './checkpoints/ucm/checkpoints_final.pth'
 #### DEFAULT VALUES USED FOR THESE######################################
 LEARNING_RATE = 2.5e-4
 LEARNING_RATE_D = 1e-4
@@ -58,16 +59,17 @@ WEIGHT_DECAY = 0.0005
 ITER_MAX = 20000
 MOMENTUM = 0.9
 NUM_WORKERS = 0
-RANDOM_SEED = 1234
+RANDOM_SEED = 1234#0
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
-THRESHOLD_ST = 0.6
+THRESHOLD_ST = 0.3 #0.6
 EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
 EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
+SPLIT_ID = None
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -132,9 +134,13 @@ def get_arguments():
                         help="Regularisation parameter for L2-loss.")
     parser.add_argument("--cuda", type=bool, default=True,
                         help="choose gpu device.")
+    parser.add_argument("--split-id", type=str, default=SPLIT_ID,
+                        help="split order id")
     return parser.parse_args()
 
 args = get_arguments()
+
+#np.random.seed(args.random_seed)
 
 def get_device(cuda):
     cuda = cuda and torch.cuda.is_available()
@@ -234,6 +240,31 @@ def get_params(model, key):
                 if isinstance(m[1], nn.Conv2d):
                     yield m[1].bias
 
+def find_checkpoint(checkpoint_dir):
+    checkpoint_D_list = []
+    checkpoint_S_list = []
+    for subdirs, dirs, files in os.walk(checkpoint_dir):
+        for i in files:
+            checkpoint = i.split('checkpoint')[1].split('.')[0]
+            if len(checkpoint.split('_'))!=1:
+                checkpoint_D = checkpoint.split('_')[0]
+                checkpoint_D_list.append(int(checkpoint_D))
+            else:
+                checkpoint_S = checkpoint
+                checkpoint_S_list.append(int(checkpoint_S))
+
+    max_S = max(checkpoint_S_list)
+    if checkpoint_D_list:
+        max_D = max(checkpoint_D_list)
+    else:
+        max_D = 0
+    if max_D == 0:
+        restore_flag = False
+    else:
+        restore_flag = True
+    return (min(max_S, max_D)), restore_flag
+
+
 def main():
     print (args)
 
@@ -246,9 +277,36 @@ def main():
     # create network
     #model = Res_Deeplab(num_classes=args.num_classes)
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
-    # load pretrained parameters
-    saved_state_dict = torch.load(args.restore_from)
-        
+    # Path to save models
+    checkpoint_dir = os.path.join(
+        EXP_OUTPUT_DIR,
+        "models",
+        args.exp_id,
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
+    )
+    if os.path.exists(checkpoint_dir) and len(os.listdir(checkpoint_dir))!=0:
+        print("path exists")
+        restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
+        if restore_flag == True:
+            restore_model = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'.pth')
+            restore_model_D = os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'_D.pth')
+            print("restoring from requeued point:", restore_iteration)
+            print("Loading Checkpoint: ", os.path.join(checkpoint_dir, 'checkpoint'+str(restore_iteration)+'.pth'))
+        else:
+            restore_iteration = 0 
+            restore_model = args.restore_from
+            restore_model_D = None
+            print("starting from scratch")
+    else:
+        restore_iteration = 0
+        restore_model = args.restore_from
+        restore_model_D = None
+        print("new model")
+
+    saved_state_dict = torch.load(restore_model)
+
     new_params = model.state_dict().copy()
     for name, param in new_params.items():
         if name in saved_state_dict and param.size() == saved_state_dict[name].size():
@@ -256,6 +314,7 @@ def main():
     model.load_state_dict(new_params)
     
     model  = nn.DataParallel(model)
+    #model = 
     model = model.to(device)
     model.train()
     #model.cuda(args.gpu)
@@ -266,7 +325,10 @@ def main():
     model_D = s4GAN_discriminator(num_classes=args.num_classes, dataset=args.dataset)
     if args.restore_from_D is not None:
         model_D.load_state_dict(torch.load(args.restore_from_D))
-    model_D  = nn.DataParallel(model_D)
+    if restore_model_D is not None:
+        print("restoring discriminator")
+        model_D.load_state_dict(torch.load(restore_model_D))
+    model_D = nn.DataParallel(model_D)
     model_D = model_D.to(device) 
     model_D.train()
     #model_D.cuda(args.gpu)
@@ -295,7 +357,7 @@ def main():
         #train_gt_dataset = data_loader( data_path, is_transform=True, augmentations=data_aug) 
 
     train_dataset_size = len(train_dataset)
-    #print ('dataset size: ', train_dataset_size)
+    print ('dataset size: ', train_dataset_size)
 
     if args.labeled_ratio is None:
         trainloader = data.DataLoader(train_dataset,
@@ -310,10 +372,20 @@ def main():
 
     else:
         partial_size = int(args.labeled_ratio * train_dataset_size)
+        #print(partial_size, "partial size")       
+        if args.split_id is not None:
+            train_ids = pickle.load(open(args.split_id, 'rb'))
+            print('loading train ids from {}'.format(args.split_id))
+        else: 
+            train_ids = np.arange(train_dataset_size)
+            #print(train_ids, "train ids")
+            np.random.shuffle(train_ids)
         
-        train_ids = np.arange(train_dataset_size)
-        np.random.shuffle(train_ids)
-       
+        print(type(train_ids))
+        pickle_filename = 'train_voc_split_'+ str(args.labeled_ratio) + '_' + str(args.threshold_st) + '.pkl'
+        pickle.dump(train_ids, open(pickle_filename, 'wb'), 0)
+        print('pickled')
+         
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
         train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:])
         train_gt_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
@@ -326,15 +398,10 @@ def main():
                         batch_size=args.batch_size, sampler=train_gt_sampler, num_workers=0, pin_memory=True)
 
         trainloader_remain_iter = iter(trainloader_remain)
-
     trainloader_iter = iter(trainloader)
     trainloader_gt_iter = iter(trainloader_gt)
 
     # optimizer for segmentation network
-    #optimizer = optim.SGD(model.optim_parameters(args),
-    #            lr=args.learning_rate, momentum=args.momentum,weight_decay=args.weight_decay)
-    #optimizer.zero_grad()
-
     
     optimizer = torch.optim.SGD(
         # cf lr_mult and decay_mult in train.prototxt
@@ -380,15 +447,17 @@ def main():
     y_real_, y_fake_ = Variable(torch.ones(args.batch_size, 1).to(device)), Variable(torch.zeros(args.batch_size, 1).to(device))
 
     # Setup loss logger
-    writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
-    average_loss = MovingAverageValueMeter(20)
+    #writer = SummaryWriter(os.path.join(EXP_OUTPUT_DIR, "logs", args.exp_id, args.dataset_split))
+    #average_loss = MovingAverageValueMeter(20)
 
     # Path to save models
     checkpoint_dir = os.path.join(
         EXP_OUTPUT_DIR,
         "models",
         args.exp_id,
-        args.dataset_split
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
     )
     if not os.path.exists(checkpoint_dir):
         makedirs(checkpoint_dir)
@@ -398,15 +467,16 @@ def main():
         EXP_OUTPUT_DIR,
         "generator_viz",
         args.exp_id,
-        args.dataset_split
+        args.dataset_split,
+        str(args.labeled_ratio),
+        str(args.threshold_st)
     )
     if not os.path.exists(generator_viz_dir):
         os.makedirs(generator_viz_dir)        
-    #import pdb
-    #pdb.set_trace()
-    for i_iter in range(args.num_steps):
 
-        #print('iter',i_iter) 
+    for i_iter in range(restore_iteration, args.num_steps):
+
+        #print(i_iter, "starting training from") 
         loss_ce_value = 0
         loss_D_value = 0
         loss_fm_value = 0
@@ -430,19 +500,11 @@ def main():
             batch = next(trainloader_iter)
 
         images, labels, _, _, _ = batch
-        #images = Variable(images).cuda(args.gpu)
         images = Variable(images).to(device)
         pred = interp(model(images))
-       
-        #import pdb
-        #pdb.set_trace()
-        #logits = F.interpolate(
-        #    logits, size=(H, W), mode="bilinear", align_corners=False
-        #)
-        
-        #loss_ce = loss_calc(pred, labels, args.gpu) # Cross entropy loss for labeled data
+
         loss_ce = loss_calc(pred, labels, device)
-        #training loss for remaining unlabeled data
+
         try:
             batch_remain = next(trainloader_remain_iter)
         except:
@@ -450,7 +512,6 @@ def main():
             batch_remain = next(trainloader_remain_iter)
         
         images_remain, _, _, names, _ = batch_remain
-        #images_remain = Variable(images_remain).cuda(args.gpu)
         images_remain = Variable(images_remain).to(device)
 
         pred_remain = interp(model(images_remain))
@@ -475,7 +536,8 @@ def main():
                 filename = os.path.join(generator_viz_dir, name + ".npy")
                 np.save(filename, gen_viz.cpu().numpy())
   
-        # training loss on above threshold segmentation predictions (Cross Entropy Loss)
+        # training loss on above threshold segmentation predictions (Cross Entropy Loss)IN: 321
+
         if count > 0 and i_iter > 0:
             #loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
             loss_st = loss_calc(pred_sel, labels_sel, device)
@@ -539,7 +601,7 @@ def main():
         scheduler.step(epoch=i_iter)
 
         print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value)) 
-        
+        ''' 
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
             writer.add_scalar("lr/group_{}".format(i), o["lr"], i_iter)
@@ -560,7 +622,7 @@ def main():
                 writer.add_histogram(
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
-
+        '''
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
