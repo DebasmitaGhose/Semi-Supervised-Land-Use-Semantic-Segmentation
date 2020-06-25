@@ -21,6 +21,7 @@ from model import *
 from data.voc_dataset import VOCDataSet
 from data.ucm_dataset import UCMDataSet
 from data import get_data_path, get_loader
+
 import torchvision.transforms as transform
 
 from PIL import Image
