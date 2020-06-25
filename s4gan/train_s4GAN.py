@@ -539,14 +539,12 @@ def main():
         bce_loss_target = make_D_label(gt_label, ignore_mask, device)
         
         #print(bce_loss_target.shape,labels.size(),D_adv_loss_map.size())
-        #print("labeled data")
         loss_adv_pred = bce_loss(D_adv_loss_map, bce_loss_target)
        
         ##############UNLABELED IMAGES###################################################################### 
         #training loss for remaining unlabeled data
         try:
             batch_remain = next(trainloader_remain_iter)
-            #print(batch_remain, "batch_remain")
         except:
             trainloader_remain_iter = iter(trainloader_remain)
             #print(next(trainloader_remain_iter), "trainloader remain iter")
@@ -554,9 +552,9 @@ def main():
         
         images_remain, _, _, names, _ = batch_remain
         images_remain = Variable(images_remain).to(device)
-        #print(images_remain.size(), "images_remain")
+
         pred_remain = interp(model(images_remain))
-        #print(pred_remain.size(), "pred_remain") 
+         
         # concatenate the prediction with the input images
         images_remain = (images_remain-torch.min(images_remain))/(torch.max(images_remain)- torch.min(images_remain))
         pred_cat_remain = torch.cat((F.softmax(pred_remain, dim=1), images_remain), dim=1)
@@ -564,11 +562,8 @@ def main():
   
         #BMVC_adv loss for unlabeled data
         D_adv_loss_map = interp(D_adv_loss_map)
-        ignore_mask_remain = np.zeros(D_adv_loss_map.squeeze(1).size()).astype(np.bool) # labels.size
+        ignore_mask_remain = np.zeros(D_adv_loss_map.squeeze(1).size()).astype(np.bool)
         bce_loss_target = make_D_label(gt_label, ignore_mask_remain, device)
-        #print(bce_loss_target.size(), "bce_loss_target")
-        #print(D_adv_loss_map.size(), "D_adv_loss_map")
-        #print("unlabeled data")
         loss_semi_adv = bce_loss(D_adv_loss_map, bce_loss_target)
 
         # find predicted segmentation maps above threshold
@@ -631,9 +626,9 @@ def main():
             param.requires_grad = True
 
         # train with pred
-        pred_cat_remain = pred_cat.detach()  # detach does not allow the graddients to back propagate.
+        pred_cat_remain = pred_cat_remain.detach()  # detach does not allow the graddients to back propagate.
         pred_cat = pred_cat.detach()
-
+         
         D_out_z, _ , _ = model_D(pred_cat_remain)
         y_fake_ = Variable(torch.zeros(D_out_z.size(0), 1).to(device))
         loss_D_fake = criterion(D_out_z, y_fake_) 
@@ -644,6 +639,24 @@ def main():
         loss_D_real = criterion(D_out_z_gt, y_real_)
         
         loss_D = (loss_D_fake + loss_D_real)/2.0
+
+        # train D for prediction S(X) with Spatial Cross Entropy
+        pred_D = torch.cat((pred_cat, pred_cat_remain), 0)
+        ignore_mask_D_fake = np.concatenate((ignore_mask,ignore_mask_remain), axis = 0) 
+        _, _, D_out_spatial_CE_fake = model_D(pred_D)
+        D_out_spatial_CE_fake = interp(D_out_spatial_CE_fake)
+        loss_spatial_D_fake = bce_loss(D_out_spatial_CE_fake, make_D_label(pred_label, ignore_mask_D_fake, device))
+        
+        # train D For GT term of Spatial Cross Entropy loss
+        ignore_mask_D_real = (labels_gt.numpy() == 255)
+        _, _, D_out_spatial_CE_gt = model_D(D_gt_v_cat)
+        D_out_spatial_CE_gt = interp(D_out_spatial_CE_gt)
+        loss_spatial_D_real = bce_loss(D_out_spatial_CE_gt, make_D_label(gt_label, ignore_mask_D_real, device))
+        
+        loss_spatial_D = (loss_spatial_D_fake + loss_spatial_D_real)/2.0
+   
+        loss_D = loss_D + loss_spatial_D
+        # backprop
         loss_D.backward()
         loss_D_value += loss_D.item()
 
@@ -651,7 +664,7 @@ def main():
         optimizer_D.step()
         scheduler.step(epoch=i_iter)
 
-        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_semi_adv= {4:.3f},loss_adv_pred = {5:.3f}, loss_S = {6:.3f}, loss_D = {7:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_semi_adv_value, loss_adv_pred_value, loss_S_value, loss_D_value)) 
+        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_semi_adv= {4:.3f},loss_adv_pred = {5:.3f}, loss_S = {6:.3f}, loss_spatial_D = {7:.3f}, loss_D = {8:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_semi_adv_value, loss_adv_pred_value, loss_S_value, loss_spatial_D, loss_D_value )) 
         '''
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
@@ -674,6 +687,7 @@ def main():
                     name + "/grad", param.grad, i_iter, bins="auto"
                     )
         '''
+
         if i_iter >= args.num_steps-1:
             print ('save model ...')
             torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(args.num_steps)+'.pth'))
