@@ -64,10 +64,10 @@ RANDOM_SEED = 1234#0
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
 THRESHOLD_ST = 0.3 #0.6
-EXP_OUTPUT_DIR = './s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
+EXP_OUTPUT_DIR = '/mnt/nfs/scratch1/dghose/Semi_Supervised_Learning_Data/s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
 LABELED_RATIO = None  #0.02 # 1/8 labeled data by default
-EXP_OUTPUT_DIR = './s4gan_files'
+EXP_OUTPUT_DIR = '/mnt/nfs/scratch1/dghose/Semi_Supervised_Learning_Data/s4gan_files'
 EXP_ID="default"
 SPLIT_ID = None
 
