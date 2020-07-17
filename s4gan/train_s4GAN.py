@@ -25,7 +25,7 @@ from model import *
 
 
 from model.discriminator import s4GAN_discriminator
-from utils.loss import CrossEntropy2d
+from utils.loss import CrossEntropy2d, WeightedCrossEntropy2d
 from data.voc_dataset import VOCDataSet, VOCGTDataSet # modify this
 from data import get_loader, get_data_path
 from data.augmentations import *
@@ -160,13 +160,20 @@ def loss_calc(pred, label, device):
     return criterion(pred, label)
 
 def weighted_loss_calc(pred, label, confidences, device):
-    print(np.shape(confidences), 'confidences')
+    loss_array = []
+    #print(np.shape(confidences), 'confidences')
+    #print(np.shape(label), 'label in weighted loss calc')
     label = Variable(label.long()).to(device)
+    #pred = pred.unsqueeze(0)
+    #label = label.unsqueeze(0)
+    #for i in range(label.size(0)):
     criterion = WeightedCrossEntropy2d(ignore_label=args.ignore_label).to(device)  # Ignore label ??
     loss_array = criterion(pred, label)
-    print(np.shape(loss_array), 'size of loss array')
-    weighted_loss = torch.sum(torch.dot(confidences, loss_array))
-    print(np.shape(weighted_loss), 'size of weighted loss')
+    #print(np.shape(loss_array), 'size of loss array')
+    #print(np.shape(confidences.squeeze()), 'confidences.squeeze')
+    #print(np.shape(loss_array), 'loss array')
+    weighted_loss = torch.mean(torch.dot(confidences.squeeze(), loss_array))
+    #print(np.shape(weighted_loss), 'size of weighted loss')
     return weighted_loss
 
 def lr_poly(base_lr, iter, max_iter, power):
@@ -204,15 +211,15 @@ def makedirs(dirs):
         os.makedirs(dirs)
      
 def find_good_maps(D_outs, pred_all, device):
-    count = D_outs.size(0)
+    count = 0
     indexes=[]
-    '''
+    
     for i in range(D_outs.size(0)):
-        print("D(S(X)): ", D_outs[i])
-        if D_outs[i] > args.threshold_st:
-            count +=1
-            indexes.append(i)
-    '''         
+        #print("D(S(X)): ", D_outs[i])
+        #if D_outs[i] > args.threshold_st:
+        count +=1
+        indexes.append(i)
+            
     #import pdb
     #pdb.set_trace()
     if count > 0:
@@ -225,6 +232,7 @@ def find_good_maps(D_outs, pred_all, device):
             pred_sel[num_sel] = pred_all[j]
             label_sel[num_sel] = compute_argmax_map(pred_all[j])
             num_sel +=1
+        #print(count, "count returned from find good maps")
         return  pred_sel.to(device), label_sel.to(device), count, indexes
     else:
         return torch.Tensor(), torch.Tensor(), count, indexes 
@@ -492,6 +500,7 @@ def main():
         loss_ce_value = 0
         loss_D_value = 0
         loss_fm_value = 0
+        loss_st_value = 0
         loss_S_value = 0
 
         optimizer.zero_grad()
@@ -536,12 +545,13 @@ def main():
   
         # find predicted segmentation maps above threshold
         pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain, device) 
-        print(pred_sel.size(0), "number of selected predictions")
+        #print(pred_sel.size(0), "number of selected predictions")
         
         # save the labels above threshold
        
         if labels_sel.size(0)!=0:
             for i in range(count):
+                #print(indexes[i], "indexes from find good maps")
                 index = indexes[i]
                 name = names[index]
                 gen_viz = labels_sel[i] 
@@ -585,7 +595,7 @@ def main():
 
         loss_S.backward()
         loss_fm_value+= args.lambda_fm*loss_fm
-
+        loss_st_value+=args.lambda_st*loss_st
         loss_ce_value += loss_ce.item()
         loss_S_value += loss_S.item()
 
@@ -613,7 +623,7 @@ def main():
         optimizer_D.step()
         scheduler.step(epoch=i_iter)
 
-        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_S = {4:.3f}, loss_D = {5:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_S_value, loss_D_value)) 
+        print('iter = {0:8d}/{1:8d}, loss_ce = {2:.3f}, loss_fm = {3:.3f}, loss_st = {4:.3f}, loss_S = {5:.3f}, loss_D = {6:.3f}'.format(i_iter, args.num_steps, loss_ce_value, loss_fm_value, loss_st_value, loss_S_value, loss_D_value)) 
         ''' 
         writer.add_scalar("loss/train", average_loss.value()[0], i_iter)
         for i, o in enumerate(optimizer.param_groups):
