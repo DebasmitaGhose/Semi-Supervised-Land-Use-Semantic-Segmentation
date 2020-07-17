@@ -197,6 +197,7 @@ def find_good_maps(D_outs, pred_all, device):
     count = 0
     indexes=[]
     for i in range(D_outs.size(0)):
+        print("D(S(X)): ", D_outs[i])
         if D_outs[i] > args.threshold_st:
             count +=1
             indexes.append(i)
@@ -382,7 +383,7 @@ def main():
             np.random.shuffle(train_ids)
         
         print(type(train_ids))
-        pickle_filename = 'train_voc_split_'+ str(args.labeled_ratio) + '_' + str(args.threshold_st) + '.pkl'
+        pickle_filename = 's4gan_files/train_voc_split_'+ str(args.labeled_ratio) + '_' + str(args.threshold_st) + '.pkl'
         pickle.dump(train_ids, open(pickle_filename, 'wb'), 0)
         print('pickled')
          
