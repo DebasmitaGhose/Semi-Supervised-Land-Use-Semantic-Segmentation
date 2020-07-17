@@ -159,6 +159,16 @@ def loss_calc(pred, label, device):
     criterion = CrossEntropy2d(ignore_label=args.ignore_label).to(device)  # Ignore label ??
     return criterion(pred, label)
 
+def weighted_loss_calc(pred, label, confidences, device):
+    print(np.shape(confidences), 'confidences')
+    label = Variable(label.long()).to(device)
+    criterion = WeightedCrossEntropy2d(ignore_label=args.ignore_label).to(device)  # Ignore label ??
+    loss_array = criterion(pred, label)
+    print(np.shape(loss_array), 'size of loss array')
+    weighted_loss = torch.sum(torch.dot(confidences, loss_array))
+    print(np.shape(weighted_loss), 'size of weighted loss')
+    return weighted_loss
+
 def lr_poly(base_lr, iter, max_iter, power):
     return base_lr*((1-float(iter)/max_iter)**(power))
 
@@ -194,26 +204,27 @@ def makedirs(dirs):
         os.makedirs(dirs)
      
 def find_good_maps(D_outs, pred_all, device):
-    count = 0
+    count = D_outs.size(0)
     indexes=[]
+    '''
     for i in range(D_outs.size(0)):
         print("D(S(X)): ", D_outs[i])
         if D_outs[i] > args.threshold_st:
             count +=1
             indexes.append(i)
-             
+    '''         
     #import pdb
     #pdb.set_trace()
     if count > 0:
-        print ('Above ST-Threshold : ', count, '/', args.batch_size)
+        #print ('Above ST-Threshold : ', count, '/', args.batch_size)
         pred_sel = torch.Tensor(count, pred_all.size(1), pred_all.size(2), pred_all.size(3))
         label_sel = torch.Tensor(count, pred_sel.size(2), pred_sel.size(3))
         num_sel = 0 
         for j in range(D_outs.size(0)):
-            if D_outs[j] > args.threshold_st:
-                pred_sel[num_sel] = pred_all[j]
-                label_sel[num_sel] = compute_argmax_map(pred_all[j])
-                num_sel +=1
+        #if D_outs[j] > args.threshold_st:
+            pred_sel[num_sel] = pred_all[j]
+            label_sel[num_sel] = compute_argmax_map(pred_all[j])
+            num_sel +=1
         return  pred_sel.to(device), label_sel.to(device), count, indexes
     else:
         return torch.Tensor(), torch.Tensor(), count, indexes 
@@ -525,6 +536,7 @@ def main():
   
         # find predicted segmentation maps above threshold
         pred_sel, labels_sel, count, indexes = find_good_maps(D_out_z, pred_remain, device) 
+        print(pred_sel.size(0), "number of selected predictions")
         
         # save the labels above threshold
        
@@ -541,7 +553,7 @@ def main():
 
         if count > 0 and i_iter > 0:
             #loss_st = loss_calc(pred_sel, labels_sel, args.gpu)
-            loss_st = loss_calc(pred_sel, labels_sel, device)
+            loss_st = weighted_loss_calc(pred_sel, labels_sel, D_out_z, device)
         else:
             loss_st = 0.0
 
