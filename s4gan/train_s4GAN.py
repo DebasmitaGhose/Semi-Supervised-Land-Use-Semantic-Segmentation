@@ -172,7 +172,11 @@ def weighted_loss_calc(pred, label, confidences, device):
     #print(np.shape(loss_array), 'size of loss array')
     #print(np.shape(confidences.squeeze()), 'confidences.squeeze')
     #print(np.shape(loss_array), 'loss array')
-    weighted_loss = torch.mean(torch.dot(confidences.squeeze(), loss_array))
+    try:
+        weighted_loss = torch.mean(torch.dot(confidences.squeeze(), loss_array))
+    except:
+        print("Confidences: ", np.shape(confidences))
+        print("Loss: ", np.shape(loss_array))
     #print(np.shape(weighted_loss), 'size of weighted loss')
     return weighted_loss
 

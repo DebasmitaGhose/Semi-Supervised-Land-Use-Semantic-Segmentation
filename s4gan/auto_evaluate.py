@@ -413,6 +413,7 @@ def main():
         if mean_iou > max_mean_iou:
             max_mean_iou = mean_iou
             best_iteration = epoch
+            best_score = score
             best_score_filename = os.path.join(scores_dir, "best_scores_" + str(epoch) + ".json")
             print("Hey yo!!, Best score found at epoch : " + str(epoch) + "and the score is: " + str(max_mean_iou))
             print("best Scores saved at: ", best_score_filename)
@@ -426,8 +427,8 @@ def main():
                 best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
                 print("CRF Scores saved at: ",best_score_filename_crf)
 
-    with open(best_score_filename, "w") as f:
-        json.dump(best_score_filename, f, indent=4, sort_keys=True)
+        with open(best_score_filename, "w") as f:
+            json.dump(best_score, f, indent=4, sort_keys=True)
 
 
     if args.crf:
