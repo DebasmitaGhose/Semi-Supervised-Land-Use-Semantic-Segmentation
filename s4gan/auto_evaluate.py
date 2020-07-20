@@ -19,7 +19,7 @@ from utils.metric import scores
 from model import *
 #from model.deeplabv3p import Res_Deeplab
 from data.voc_dataset import VOCDataSet
-from data.ucm_dataset import UCMDataSet
+#from data.ucm_dataset import UCMDataSet
 from data import get_data_path, get_loader
 import torchvision.transforms as transform
 
@@ -40,8 +40,7 @@ RESTORE_FROM = './checkpoints/ucm/checkpoint_final.pth'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 EXP_ID = "default"
-EXP_OUTPUT_DIR = './s4gan_files'
-
+EXP_OUTPUT_DIR = '/mnt/nfs/scratch1/dghose/Semi_Supervised_Learning_Data/s4gan_files'
 
 ######### CRF ################
 CRF_ITER_MAX = 10 
@@ -275,8 +274,8 @@ def main():
         #    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
         elif args.threshold_st is not None:
             print("Loading new weights")
-            print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'), 'saved weights')
-            saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'))
+            print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train_aug",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'), 'saved weights')
+            saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train_aug",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'))
 
         else:
             print("Loading old weights")
