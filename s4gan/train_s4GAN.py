@@ -61,8 +61,8 @@ MOMENTUM = 0.9
 NUM_WORKERS = 0
 RANDOM_SEED = 1234#0
 
-LAMBDA_FM = 0.1
-LAMBDA_ST = 1.0
+LAMBDA_FM = 0.75 #1.0 #0.1
+LAMBDA_ST = 1.5 #0.75 #0.1 #1.0
 THRESHOLD_ST = 0.3 #0.6
 EXP_OUTPUT_DIR = '/mnt/nfs/scratch1/dghose/Semi_Supervised_Learning_Data/s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
@@ -222,7 +222,7 @@ def find_good_maps(D_outs, pred_all, device):
     indexes=[]
     
     for i in range(D_outs.size(0)):
-        #print("D(S(X)): ", D_outs[i])
+        print("D(S(X)): ", D_outs[i])
         #if D_outs[i] > args.threshold_st:
         count +=1
         indexes.append(i)

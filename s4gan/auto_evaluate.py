@@ -334,7 +334,7 @@ def main():
             mlmt_preds[mlmt_preds<0.2] = 0 
              
         for index, batch in enumerate(testloader):
-            if index % 1 == 0:
+            if index % 100 == 0:
                 print('%d processd'%(index))
             image, label, size, name, _ = batch
             size = size[0]
@@ -371,7 +371,7 @@ def main():
             if args.crf:
                 if not os.path.exists(viz_dir_crf):
                     makedirs(viz_dir_crf)
-            print("Visualization dst:", viz_dir)
+            #print("Visualization dst:", viz_dir)
             if args.crf:
                 postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
                                         pos_xy_std=CRF_POS_XY_STD,
