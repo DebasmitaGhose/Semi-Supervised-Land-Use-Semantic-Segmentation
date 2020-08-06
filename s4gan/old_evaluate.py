@@ -19,37 +19,27 @@ from utils.metric import scores
 from model import *
 #from model.deeplabv3p import Res_Deeplab
 from data.voc_dataset import VOCDataSet
-#from data.ucm_dataset import UCMDataSet
 from data import get_data_path, get_loader
 import torchvision.transforms as transform
 
 from PIL import Image
 import scipy.misc
-from utils.crf import DenseCRF
+
 
 IMG_MEAN = np.array((104.00698793,116.66876762,122.67891434), dtype=np.float32)
 
-DATASET = 'ucm' # pascal_context
+DATASET = 'pascal_voc' # pascal_context
 
 MODEL = 'deeplabv2' # deeeplabv2, deeplabv3p
-DATA_DIRECTORY = '../../Satellite_Images/'
-DATA_LIST_PATH = '../../Satellite_Images/ImageSets/test.txt' # subset.txt
+DATA_DIRECTORY = '../../VOCdevkit/VOC2012/'
+DATA_LIST_PATH = '../../VOCdevkit/VOC2012/ImageSets/Segmentation/val.txt'
 IGNORE_LABEL = 255
-NUM_CLASSES = 18 # 60 for pascal context
-RESTORE_FROM = './checkpoints/ucm/checkpoint_final.pth'
+NUM_CLASSES = 21 # 60 for pascal context
+RESTORE_FROM = './checkpoints/deeplabv2_resnet101_msc-vocaug-20000.pth'
 PRETRAINED_MODEL = None
 SAVE_DIRECTORY = 'results'
 EXP_ID = "default"
-EXP_OUTPUT_DIR = '/mnt/nfs/scratch1/dghose/Semi_Supervised_Learning_Data/s4gan_files/'
-
-
-######### CRF ################
-CRF_ITER_MAX = 10 
-CRF_POS_XY_STD = 1
-CRF_POS_W = 3
-CRF_BI_XY_STD = 1
-CRF_BI_RGB_STD = 67
-CRF_BI_W = 4
+EXP_OUTPUT_DIR = './s4gan_files'
 
 def get_arguments():
     """Parse all the arguments provided from the CLI.
@@ -86,12 +76,6 @@ def get_arguments():
                         help="combine with Multi-Label Mean Teacher branch")
     parser.add_argument("--save-output-images", action="store_true",
                         help="save output images")
-    parser.add_argument("--crf", action="store_true",
-                        help="apply crf postprocessing to precomputed logits")
-    parser.add_argument("--labeled-ratio", type=float, default=None,
-                        help="labeled ratio of the trained model")
-    parser.add_argument("--threshold-st", type=float, default=None,
-                        help="threshold st of the trained model")
     return parser.parse_args()
 
 def makedirs(dirs):
@@ -119,35 +103,6 @@ class VOCColorize(object):
         color_image[0][mask] = color_image[1][mask] = color_image[2][mask] = 255
 
         return color_image
-
-def UCMColorize(label_mask, save_file):
-        label_colours = ucm_color_map()
-        r = label_mask.copy()
-        g = label_mask.copy()
-        b = label_mask.copy()
-        for ll in range(0, 18):
-            r[label_mask == ll] = label_colours[ll, 0]
-            g[label_mask == ll] = label_colours[ll, 1]
-            b[label_mask == ll] = label_colours[ll, 2]
-        rgb = np.zeros((label_mask.shape[0], label_mask.shape[1], 3))
-        rgb[:, :, 0] = b #r
-        rgb[:, :, 1] = g #g 
-        rgb[:, :, 2] = r #b 
-        #print(rgb.shape, 'rgb')
-        print(save_file)
-        #plt.imshow(rgb)
-        #plt.savefig(save_file)
-        cv2.imwrite(save_file, rgb)
-
-        return rgb
-
-def ucm_color_map():
-        return np.asarray([[0, 0, 0], [166, 202, 240], [128, 128, 0], [0, 0, 128],
-                           [255, 0, 0], [0, 128, 0], [128, 0, 0], [255, 233, 233],
-                           [160, 160, 164], [0, 128, 128], [90, 87, 255], [255, 255, 0],
-                           [255, 192, 0], [0, 0, 255], [255, 0, 192], [128, 0, 128],
-                           [0, 255, 0], [0, 255, 255]])
-
 
 def color_map(N=256, normalized=False):
     def bitget(byteval, idx):
@@ -219,14 +174,6 @@ def get_iou(args, data_list, class_num, save_path=None):
             "terrain", "sky", "person", "rider",
             "car", "truck", "bus",
             "train", "motorcycle", "bicycle")) 
-    elif args.dataset == 'ucm':
-        classes = np.array(('background',  # always index 0
-            'airplane', 'bare_soil', 'buildings', 'cars',
-            'chapparal', 'court', 'dock', 'field', 'grass',
-            'mobile_home', 'pavement', 'sand', 'sea',
-            'ship', 'tanks', 'trees',
-            'water'))
-
 
     for i, iou in enumerate(j_list):
         print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
@@ -237,33 +184,6 @@ def get_iou(args, data_list, class_num, save_path=None):
             for i, iou in enumerate(j_list):
                 f.write('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]) + '\n')
             f.write('meanIOU: ' + str(aveJ) + '\n')
-
-def crf_process(image, label, logit, size, postprocessor):
-        H = size[0]
-        W = size[1]
-        #print(logit.shape, "before")
-        #logit = torch.FloatTensor(logit)#[None, ...]
-        #logit = torch.unsqueeze(logit,0)
-        #print(logit.shape, "logit inside crf_process")
-        logit = F.interpolate(logit, size=(H, W), mode="bilinear", align_corners=False)
-        #print(logit, "logit")
-        #logit = torch.squeeze(logit, 0)
-        #print(logit.shape, "logit")
-        prob = F.softmax(logit, dim=1)[0].cpu().numpy()
-        
-        #print(F.softmax(logit, dim=2).shape, "prob") # dim = 1
-        image = torch.squeeze(image)
-        #print(prob, "prob")
-        image = image.numpy()
-        #print(image.shape, "image passed to postprocessor")
-        image = image.astype(np.uint8).transpose(1, 2, 0)
-        #print(image.shape, "image passed to postprocessor")
-        #print(image, "image")
-        prob_post = postprocessor(image, prob)
-        #print(prob_post, "prob_post")
-        crf_label = np.argmax(prob_post, axis=0)
-
-        return crf_label
 
 def main():
     """Create the model and start the evaluation process."""
@@ -280,19 +200,13 @@ def main():
 
     if args.restore_from[:4] == 'http' :
         saved_state_dict = model_zoo.load_url(args.restore_from)
-    #elif EXP_ID == "default":
-    #    print("Restoring from default")
-    #    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
-    elif args.threshold_st is not None:
-        print("Loading new weights")
-        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train_aug",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
-        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train_aug",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(args.check_epoch)+'.pth'))
-
+    elif EXP_ID  == "default" :
+        saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
+        print("default exp id")
     else:
-        print("Loading old weights")
         #saved_state_dict = torch.load(args.restore_from)
-        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train_aug", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
-        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train_aug", 'checkpoint'+str(args.check_epoch)+'.pth'))
+        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'), 'saved weights')
+        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(args.check_epoch)+'.pth'))
     #print("Restoring from: ", saved_state_dict)
     model.load_state_dict(saved_state_dict)
 
@@ -302,17 +216,7 @@ def main():
     if args.dataset == 'pascal_voc':
         testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
-
-    elif args.dataset == 'ucm':
-        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
-                                    batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
-        if args.crf:
-            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
-                                        batch_size=1, shuffle=False, pin_memory=True)
-            interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
-
+        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True) # align corners = True
 
     elif args.dataset == 'pascal_context':
         input_transform = transform.Compose([transform.ToTensor(),
@@ -334,10 +238,8 @@ def main():
     data_list = []
     gt_list = []
     output_list = []
-    crf_result_list = []
-    #colorize = VOCColorize()
-    #colorize = UCMColorize()
-
+    colorize = VOCColorize()
+   
     if args.with_mlmt:
         mlmt_preds = np.loadtxt('mlmt_output/output_ema_p_1_0_voc_5.txt', dtype = float) # best mt 0.05
 
@@ -348,17 +250,11 @@ def main():
         if index % 1 == 0:
             print('%d processd'%(index))
         image, label, size, name, _ = batch
-        #print(size, "size")
         size = size[0]
         output  = model(Variable(image, volatile=True).cuda(gpu0))
-        crf_output = output.clone().detach()
-        #print(type(output))
         output = interp(output).cpu().data[0].numpy()
-        
+
         if args.dataset == 'pascal_voc':
-            output = output[:,:size[0],:size[1]]
-            gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
-        elif args.dataset == 'ucm':
             output = output[:,:size[0],:size[1]]
             gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
         elif args.dataset == 'pascal_context':
@@ -372,68 +268,34 @@ def main():
         
         output = output.transpose(1,2,0)
         output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
-        if args.labeled_ratio is not None:
-            viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
-            viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf", str(args.labeled_ratio), str(args.threshold_st))
-        else:
-            viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
-            viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
 
+        viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
+        
         if not os.path.exists(viz_dir):
             makedirs(viz_dir)
-        if args.crf:
-            if not os.path.exists(viz_dir_crf):
-                makedirs(viz_dir_crf)
         print("Visualization dst:", viz_dir)
-        if args.crf:
-            postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
-                                     pos_xy_std=CRF_POS_XY_STD,
-                                     pos_w=CRF_POS_W,
-                                     bi_xy_std=CRF_BI_XY_STD,
-                                     bi_rgb_std=CRF_BI_RGB_STD,
-                                     bi_w=CRF_BI_W,)
-            #print(postprocessor, "postprocessor")
-            result_crf = crf_process(image, label, crf_output, size, postprocessor)
-            #print(result_crf, "crf result")
+        
         if args.save_output_images:
-            if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
+            if args.dataset == 'pascal_voc':
                 filename = '{}.png'.format(name[0])
-                #print(type(output), "output in visualize")
-                #color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-                savefile = os.path.join(viz_dir, filename)
-                color_file = UCMColorize(output, savefile)
-                #color_file.save(os.path.join(viz_dir, filename))
+                color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
+                color_file.save(os.path.join(viz_dir, filename))
             #elif args.dataset == 'pascal_context':
             #    filename = os.path.join(args.save_dir, filename[0])
-            #    scipy.misc.imsave(filename, gt)i
-            #print(output.shape, "output shape")
-            if args.crf:
-                filename = '{}.png'.format(name[0])
-                #print(type(output), "output in visualize")
-                #color_file = Image.fromarray(colorize(output).transpose(1, 2, 0), 'RGB')
-                savefile = os.path.join(viz_dir_crf, filename)
-                color_file = UCMColorize(result_crf, savefile)
+            #    scipy.misc.imsave(filename, gt)
         
         data_list.append([gt.flatten(), output.flatten()])
-
         gt_list.append(gt)
         output_list.append(output)
-        if args.crf:
-            crf_result_list.append(result_crf)
         #score = scores(data_list[0], output.flatten(), args.num_classes)
         #print(score)
     #print(np.shape(data_list[0][:]),'data list')
-    if args.labeled_ratio is not None:
-        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
-    else:
-        scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
+    scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split)
     if not os.path.exists(scores_dir):
         makedirs(scores_dir)
     scores_filename = os.path.join(scores_dir, "scores.json")
     print("Scores saved at: ",scores_filename)
 
-    if args.crf:
-        scores_filename_crf = os.path.join(scores_dir, "scores_crf.json")
     
 
         #get_iou(args, data_list, args.num_classes, filename)
@@ -444,19 +306,10 @@ def main():
     #print(np.shape(gt_list[0]), 'gt list')
     #print(np.shape(output_list[0]), 'output list')
     score = scores(gt_list, output_list, args.num_classes)
-    print(score)
+    #print(score)
     with open(scores_filename, "w") as f:
         json.dump(score, f, indent=4, sort_keys=True)
 
-    if args.crf:
-        score_crf = scores(gt_list, crf_result_list, args.num_classes)
-    #print(score)
-        print("CRF Scores saved at: ",scores_filename_crf)
-
-        with open(scores_filename_crf, "w") as f:
-            json.dump(score_crf, f, indent=4, sort_keys=True)
-    
-        
 
 if __name__ == '__main__':
     main()

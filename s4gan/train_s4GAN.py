@@ -62,7 +62,7 @@ NUM_WORKERS = 0
 RANDOM_SEED = 1234#0
 
 LAMBDA_FM = 0.75 #1.0 #0.1
-LAMBDA_ST = 1.5 #0.75 #0.1 #1.0
+LAMBDA_ST = 0.6#0.3 #0.5#1.5 #0.75 #0.1 #1.0
 THRESHOLD_ST = 0.3 #0.6
 EXP_OUTPUT_DIR = '/mnt/nfs/scratch1/dghose/Semi_Supervised_Learning_Data/s4gan_files' # 0.6 for PASCAL-VOC/Context / 0.7 for Cityscapes
 #####################################################
