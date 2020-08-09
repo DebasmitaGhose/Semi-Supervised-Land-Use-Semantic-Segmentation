@@ -290,9 +290,9 @@ def main():
         model.cuda(gpu0)
 
         if args.dataset == 'pascal_voc':
-            testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
+            testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False), 
                                     batch_size=1, shuffle=False, pin_memory=True)
-            interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+            interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
 
         elif args.dataset == 'ucm':
             testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),

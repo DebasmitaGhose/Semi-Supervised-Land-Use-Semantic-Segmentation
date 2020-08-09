@@ -48,6 +48,9 @@ class VOCDataSet(data.Dataset):
         #print(index)
         datafiles = self.files[index]
         image = cv2.imread(datafiles["img"], cv2.IMREAD_COLOR)
+        #import pdb
+        #pdb.set_trace()
+
         #label = cv2.imread(datafiles["label"], cv2.IMREAD_GRAYSCALE)
         label = np.asarray(Image.open(datafiles["label"]), dtype=np.int32)
         size = image.shape
@@ -59,7 +62,9 @@ class VOCDataSet(data.Dataset):
         img_h, img_w = label.shape
         pad_h = max(self.crop_h - img_h, 0)
         pad_w = max(self.crop_w - img_w, 0)
+        #print("OUTSIDE PADDING")  
         if pad_h > 0 or pad_w > 0:
+            #print("INSIDE PADDING")
             img_pad = cv2.copyMakeBorder(image, 0, pad_h, 0,
                 pad_w, cv2.BORDER_CONSTANT,
                 value=(0.0, 0.0, 0.0))
@@ -70,11 +75,36 @@ class VOCDataSet(data.Dataset):
             img_pad, label_pad = image, label
 
         img_h, img_w = label_pad.shape
+        #print("label shape",label_pad.shape)
         h_off = random.randint(0, img_h - self.crop_h)
         w_off = random.randint(0, img_w - self.crop_w)
+
+        #print("h_off",h_off)
+        #print("w_off",w_off)  
+
+        ###
+        from skimage.io import imsave
+        #print(img_pad.shape)
+        #save_im = img_pad.transpose((2,0,1))
+        #imsave("before_dataloader_" + name + "_image.png",img_pad)
+        #np.save("before_dataloader_" + name + "_label.npy",label_pad)
+        ###
+
         image = np.asarray(img_pad[h_off : h_off+self.crop_h, w_off : w_off+self.crop_w], np.float32)
         label = np.asarray(label_pad[h_off : h_off+self.crop_h, w_off : w_off+self.crop_w], np.float32)
+        
+
         image = image[:, :, ::-1]  # change to BGR
+        # image = image.transpose((2, 0, 1))
+        #print("AFTER h_off && w_off")
+        #print("image.shape",image.shape)
+        #print("label.shape",label.shape)   
+        
+        ##MADNESS!!
+        #import pdb
+        #pdb.set_trace()
+        #imsave("after_dataloader_" + name + "_image.png",image)
+        #np.save("after_dataloader_" + name + "_label.npy",label) 
         image = image.transpose((2, 0, 1))
         if self.is_mirror:
             flip = np.random.choice(2) * 2 - 1

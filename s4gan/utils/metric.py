@@ -14,9 +14,13 @@ def _fast_hist(label_true, label_pred, n_class):
 
 
 def scores(label_trues, label_preds, n_class):
+    ID = 3
     hist = np.zeros((n_class, n_class))
     for lt, lp in zip(label_trues, label_preds):
         hist += _fast_hist(lt.flatten(), lp.flatten(), n_class)
+    #np.save('hist_'+str(ID)+'.npy', hist)
+    #np.save('label_true_'+str(ID)+'.npy', label_trues)
+    #np.save('label_preds_'+str(ID)+'.npy', label_preds)
     acc = np.diag(hist).sum() / hist.sum()
     acc_cls = np.diag(hist) / hist.sum(axis=1)
     acc_cls = np.nanmean(acc_cls)

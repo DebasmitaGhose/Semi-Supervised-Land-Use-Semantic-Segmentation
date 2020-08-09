@@ -300,9 +300,9 @@ def main():
     model.cuda(gpu0)
 
     if args.dataset == 'pascal_voc':
-        testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
+        testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(505, 505), mean=IMG_MEAN, scale=False, mirror=False), 
                                     batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+        interp = nn.Upsample(size=(505, 505), mode='bilinear', align_corners=True)
 
     elif args.dataset == 'ucm':
         testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
@@ -343,11 +343,12 @@ def main():
 
         mlmt_preds[mlmt_preds>=0.2] = 1
         mlmt_preds[mlmt_preds<0.2] = 0 
- 
+    
     for index, batch in enumerate(testloader):
         if index % 1 == 0:
             print('%d processd'%(index))
         image, label, size, name, _ = batch
+        #print(name)
         #print(size, "size")
         size = size[0]
         output  = model(Variable(image, volatile=True).cuda(gpu0))
@@ -365,6 +366,10 @@ def main():
             gt = np.asarray(label[0].numpy(), dtype=np.int)
         elif args.dataset == 'cityscapes':
             gt = np.asarray(label[0].numpy(), dtype=np.int)
+        #np.save(name[0] + '_gt_3.npy', gt)
+        #np.save(name[0] + '_pred_3.npy', output)        
+        #if index == 10:
+        #    break
 
         if args.with_mlmt:
             for i in range(args.num_classes):
