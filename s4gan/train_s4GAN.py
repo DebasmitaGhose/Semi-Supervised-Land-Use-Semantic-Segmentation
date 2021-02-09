@@ -384,7 +384,7 @@ def main():
         img_names = [i_id.strip() for i_id in open(args.data_list)]
         img_names = np.array(img_names)
         s4gan_names = img_names[train_ids]
-        #print(s4gan_names)
+        print(s4gan_names)
         np.save('s4gan_names_with_seed',s4gan_names)
 
 
@@ -404,6 +404,7 @@ def main():
     elif args.active_learning:
  
         active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
+        print(active_list_path, 'active list path')
         active_img_names = [i_id.strip() for i_id in open(active_list_path)]
         print(np.shape(active_img_names), 'active image names')
         all_img_names  = [i_id.strip() for i_id in open(args.data_list)]  
@@ -423,6 +424,7 @@ def main():
         print(np.shape(active_ids), 'active ids')
         
         train_ids = np.arange(train_dataset_size)
+        print(train_ids, 'train_ids')
         remaining_ids = np.delete(train_ids, active_ids)
         
         train_sampler = data.sampler.SubsetRandomSampler(active_ids)
@@ -451,7 +453,7 @@ def main():
 
         #print(np.shape(train_ids[:partial_size]), 'train sampler')
         #print(np.shape(train_ids[partial_size:]), 'train remain sampler')        
-
+        print(train_ids[:20])
 
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
         train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:]) #############IMPORTANT patial_size:
