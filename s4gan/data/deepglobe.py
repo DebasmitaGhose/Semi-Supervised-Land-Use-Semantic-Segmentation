@@ -51,6 +51,40 @@ class DeepGlobeDataSet(data.Dataset):
         image = cv2.resize(image, None, fx=f_scale, fy=f_scale, interpolation = cv2.INTER_LINEAR)
         label = cv2.resize(label, None, fx=f_scale, fy=f_scale, interpolation = cv2.INTER_NEAREST)
         return image, label
+    
+    def get_deepglobe_labels(self):
+        """Load the mapping that associates pascal classes with label colors
+        Returns:
+            np.ndarray with dimensions (7, 3)
+        """
+        return np.asarray(
+            [
+                [0, 255, 255],#urban_land
+                [255, 255, 0], #agriculture_land	
+                [255, 0, 255], #rangeland
+                [0, 255, 0], #forest 
+                [0, 0, 255], #water 
+                [255, 255, 255],#barren  
+                [0, 0, 0] #unknown
+            ]
+        ) 
+
+    #https://github.com/meetshah1995/pytorch-semseg/blob/master/ptsemseg/loader/pascal_voc_loader.py#L140
+    def encode_segmap(self, mask):
+         """Encode segmentation label images as pascal classes
+        Args:
+            mask (np.ndarray): raw segmentation label image of dimension
+              (M, N, 3), in which the Pascal classes are encoded as colours.
+        Returns:
+            (np.ndarray): class map with dimensions (M,N), where the value at
+            a given location is the integer denoting the class index.
+        """
+        mask = mask.astype(int)
+        label_mask = np.zeros((mask.shape[0], mask.shape[1]), dtype=np.int16)
+        for ii, label in enumerate(self.get_deepglobe_labels()):
+            label_mask[np.where(np.all(mask == label, axis=-1))[:2]] = ii
+        label_mask = label_mask.astype(int)
+        return label_mask         
 
     def __getitem__(self, index):
         #import pdb
@@ -64,6 +98,7 @@ class DeepGlobeDataSet(data.Dataset):
         #print(image.shape, "image")
         #label = cv2.imread(datafiles["label"], cv2.IMREAD_GRAYSCALE)
         label = np.asarray(Image.open(datafiles["label"]), dtype=np.int32)
+        label = self.encode_segmap(label)
         #print(label.shape, "label")
         #print(np.min(label), "min label")
         size = image.shape

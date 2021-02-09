@@ -28,6 +28,7 @@ from model.discriminator import s4GAN_discriminator
 from utils.loss import CrossEntropy2d
 from data.voc_dataset import VOCDataSet, VOCGTDataSet # modify this
 from data.ucm_dataset import UCMDataSet
+from data.deepglobe import DeepGlobeDataSet
 from data import get_loader, get_data_path
 from data.augmentations import *
 from utils.lr_scheduler import PolynomialLR
@@ -353,6 +354,10 @@ def main():
                         #scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
     elif args.dataset == 'ucm':
         train_dataset = UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=input_size,
+                        scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
+
+    elif args.dataset == 'deepglobe':
+        train_dataset = DeepGlobeDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=input_size,
                         scale=args.random_scale, mirror=args.random_mirror, mean=IMG_MEAN)
 
     elif args.dataset == 'pascal_context':
