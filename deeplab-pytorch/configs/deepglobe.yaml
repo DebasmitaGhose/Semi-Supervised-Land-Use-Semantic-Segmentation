@@ -1,18 +1,18 @@
 EXP:
-    ID: ucm5
+    ID: deepglobe
     OUTPUT_DIR: data
 
 DATASET:
-    NAME: ucm
-    ROOT: /home/dg777/project
+    NAME: deepglobe
+    ROOT: /home/dg777/project/
     LABELS: ./data/datasets/voc12/labels.txt
-    N_CLASSES: 18
-    IGNORE_LABEL: 255
+    N_CLASSES: 6
+    IGNORE_LABEL: 6
     SCALES: [0.5, 0.75, 1.0, 1.25, 1.5]
     SPLIT:
-        TRAIN: train
-        VAL: test
-        TEST: test
+        TRAIN: train_images
+        VAL: test_images
+        TEST: test_images
 
 DATALOADER:
     NUM_WORKERS: 0
@@ -32,13 +32,13 @@ MODEL:
     N_BLOCKS: [3, 4, 23, 3]
     ATROUS_RATES: [6, 12, 18, 24]
     INIT_MODEL: data/models/coco/deeplabv1_resnet101/caffemodel/deeplabv1_resnet101-coco.pth
-    CHECKPOINT: data/models/ucm4/deeplabv2_resnet101_msc/train/checkpoint_final.pth
+    CHECKPOINT: data/models/deepglobe/deeplabv2_resnet101_msc/train/checkpoint_final.pth
 
 SOLVER:
     BATCH_SIZE:
         TRAIN: 5
         TEST: 1
-    ITER_MAX: 1000 #5 #20000
+    ITER_MAX: 3000 #5 #20000
     ITER_SIZE: 2
     ITER_SAVE: 100 #2 #5000
     ITER_TB: 1 #100

@@ -24,7 +24,8 @@ from tqdm import tqdm
 
 from libs.datasets import get_dataset
 from libs.models import *
-from libs.utils import DenseCRF, PolynomialLR, scores
+from libs.utils.lr_scheduler import PolynomialLR
+#from libs.utils import PolynomialLR, scores
 
 
 def makedirs(dirs):
@@ -145,7 +146,8 @@ def train(config_path, cuda):
     assert (
         CONFIG.MODEL.NAME == "DeepLabV2_ResNet101_MSC"
     ), 'Currently support only "DeepLabV2_ResNet101_MSC"'
-    pdb.set_trace()
+    
+    #pdb.set_trace()
     # Model setup
     #checkpoint_path = 'data/models/ucm2/deeplabv2_resnet101_msc/train/checkpoint_final.pth' 
     model = eval(CONFIG.MODEL.NAME)(n_classes=CONFIG.DATASET.N_CLASSES)
@@ -155,9 +157,9 @@ def train(config_path, cuda):
         if m not in state_dict.keys():
             print("    Skip init:", m)
     model.base.load_state_dict(state_dict, strict=False)  # to skip ASPP
-    state_dict_2 = torch.load(CONFIG.MODEL.CHECKPOINT)
-    print('Restoring from Checkpoint = ', CONFIG.MODEL.CHECKPOINT)
-    model.load_state_dict(state_dict_2) 
+    #state_dict_2 = torch.load(CONFIG.MODEL.CHECKPOINT)
+    #print('Restoring from Checkpoint = ', CONFIG.MODEL.CHECKPOINT)
+    #model.load_state_dict(state_dict_2) 
     model = nn.DataParallel(model)
     model.to(device)
 
@@ -227,10 +229,11 @@ def train(config_path, cuda):
         loss = 0
         for _ in range(CONFIG.SOLVER.ITER_SIZE):
             try:
-                _, images, labels = next(loader_iter)
+                #print(next(loader_iter))
+                _ , images, labels = next(loader_iter) # _, images, labels
             except:
                 loader_iter = iter(loader)
-                _, images, labels = next(loader_iter)
+                _ , images, labels = next(loader_iter)
 
             # Propagate forward
             logits = model(images.to(device))
@@ -241,7 +244,10 @@ def train(config_path, cuda):
                 # Resize labels for {100%, 75%, 50%, Max} logits
                 _, _, H, W = logit.shape
                 labels_ = resize_labels(labels, size=(H, W))
-                iter_loss += criterion(logit, labels_.to(device))
+                #print(type(logit), 'logit')
+                #print(np.shape(labels_), 'label')
+                iter_loss += criterion(logit.to(device), labels_.to(device))
+                #pdb.set_trace()
 
             # Propagate backward (just compute gradients wrt the loss)
             iter_loss /= CONFIG.SOLVER.ITER_SIZE
