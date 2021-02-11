@@ -47,7 +47,7 @@ BATCH_SIZE = 1
 NUM_STEPS = 40000
 SAVE_PRED_EVERY = 5000
 
-INPUT_SIZE = '321,321'
+INPUT_SIZE = '320,320'
 IGNORE_LABEL = 255 # 255 for PASCAL-VOC / -1 for PASCAL-Context / 250 for Cityscapes
 
 RESTORE_FROM = './pretrained_models/resnet101-5d3b4d8f.pth'

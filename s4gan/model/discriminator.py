@@ -14,7 +14,7 @@ class s4GAN_discriminator(nn.Module):
             self.avgpool = nn.AvgPool2d((20, 20))
         elif dataset == 'cityscapes':
             self.avgpool = nn.AvgPool2d((16, 32))
-        elif dataset == 'ucm':
+        elif dataset == 'ucm' or dataset=='deepglobe':
             self.avgpool = nn.AvgPool2d((20, 20))
         self.fc = nn.Linear(ndf*8, 1)
         self.leaky_relu = nn.LeakyReLU(negative_slope=0.2, inplace=True)
