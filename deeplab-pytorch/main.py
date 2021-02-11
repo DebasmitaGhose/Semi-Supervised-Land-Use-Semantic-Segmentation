@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import yaml
 from addict import Dict
 from PIL import Image
-from tensorboardX import SummaryWriter
+#from tensorboardX import SummaryWriter
 from torchnet.meter import MovingAverageValueMeter
 from tqdm import tqdm
 
@@ -26,7 +26,7 @@ from libs.datasets import get_dataset
 from libs.models import *
 from libs.utils.lr_scheduler import PolynomialLR
 #from libs.utils import PolynomialLR, scores
-
+from libs.utils.metric import scores
 
 def makedirs(dirs):
     if not os.path.exists(dirs):
@@ -199,7 +199,7 @@ def train(config_path, cuda):
     )
 
     # Setup loss logger
-    writer = SummaryWriter(os.path.join(CONFIG.EXP.OUTPUT_DIR, "logs", CONFIG.EXP.ID))
+    #writer = SummaryWriter(os.path.join(CONFIG.EXP.OUTPUT_DIR, "logs", CONFIG.EXP.ID))
     average_loss = MovingAverageValueMeter(CONFIG.SOLVER.AVERAGE_LOSS)
 
     # Path to save models
@@ -264,7 +264,7 @@ def train(config_path, cuda):
 
         # Update learning rate
         scheduler.step(epoch=iteration)
-
+        '''
         # TensorBoard
         if iteration % CONFIG.SOLVER.ITER_TB == 0:
             writer.add_scalar("loss/train", average_loss.value()[0], iteration)
@@ -286,7 +286,7 @@ def train(config_path, cuda):
                         writer.add_histogram(
                             name + "/grad", param.grad, iteration, bins="auto"
                         )
-
+        '''
         # Save a model
         if iteration % CONFIG.SOLVER.ITER_SAVE == 0:
             torch.save(
@@ -383,8 +383,8 @@ def test(config_path, model_path, cuda):
     ):
         # Image
         images = images.to(device)
-        import pdb
-        pdb.set_trace()
+        #import pdb
+        #pdb.set_trace()
         # Forward propagation
         logits = model(images)
 

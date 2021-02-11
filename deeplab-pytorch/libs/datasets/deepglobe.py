@@ -44,7 +44,7 @@ class DeepGlobe(_BaseDataset):
         image_path = osp.join(self.root, self.image_dir, image_id + "_sat.jpg")
         label_path = osp.join(self.root, self.label_dir, image_id + "_mask.png")
         # Load an image
-        #print(label_path)
+        print(image_path)
         image = cv2.imread(image_path, cv2.IMREAD_COLOR).astype(np.float32)
         image = cv2.resize(image, (320,320), interpolation=cv2.INTER_CUBIC)
         #image = cv2.imread(image_path, -1).astype(np.float32) # https://stackoverflow.com/questions/18446804/python-read-and-write-tiff-16-bit-three-channel-colour-images
