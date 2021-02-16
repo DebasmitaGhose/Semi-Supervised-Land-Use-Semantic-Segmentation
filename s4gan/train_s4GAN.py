@@ -390,7 +390,7 @@ def main():
         img_names = np.array(img_names)
         s4gan_names = img_names[train_ids]
         print(s4gan_names)
-        np.save('s4gan_names_with_seed',s4gan_names)
+        np.save('s4gan_names_with_seed_deepglobe',s4gan_names)
 
 
     if args.labeled_ratio is None:

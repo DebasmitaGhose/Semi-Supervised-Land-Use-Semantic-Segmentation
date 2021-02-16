@@ -64,8 +64,7 @@ class DeepGlobeDataSet(data.Dataset):
                 [255, 0, 255], #rangeland
                 [0, 255, 0], #forest 
                 [0, 0, 255], #water 
-                [255, 255, 255],#barren  
-                [0, 0, 0] #unknown
+
             ]
         ) 
 

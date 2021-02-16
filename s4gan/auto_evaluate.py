@@ -20,6 +20,7 @@ from model import *
 #from model.deeplabv3p import Res_Deeplab
 from data.voc_dataset import VOCDataSet
 from data.ucm_dataset import UCMDataSet
+from data.deepglobe import DeepGlobeDataSet
 from data import get_data_path, get_loader
 import torchvision.transforms as transform
 
@@ -301,6 +302,11 @@ def main():
                                     batch_size=1, shuffle=False, pin_memory=True)
             interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
 
+        elif args.dataset == 'deepglobe':
+            testloader = data.DataLoader(DeepGlobeDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type,  crop_size=(320, 320), mean=IMG_MEAN, scale=False, mirror=False),
+                                    batch_size=1, shuffle=False, pin_memory=True)
+            interp = nn.Upsample(size=(320, 320), mode='bilinear', align_corners=True)
+
         elif args.dataset == 'ucm':
             testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
                                     batch_size=1, shuffle=False, pin_memory=True)
@@ -355,6 +361,9 @@ def main():
             elif args.dataset == 'ucm':
                 output = output[:,:size[0],:size[1]]
                 gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
+            elif args.dataset == 'deepglobe':
+                output = output[:,:size[0],:size[1]]
+                gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
             elif args.dataset == 'pascal_context':
                 gt = np.asarray(label[0].numpy(), dtype=np.int)
             elif args.dataset == 'cityscapes':
@@ -378,7 +387,7 @@ def main():
             if args.crf:
                 if not os.path.exists(viz_dir_crf):
                     makedirs(viz_dir_crf)
-            print("Visualization dst:", viz_dir)
+            #print("Visualization dst:", viz_dir)
             if args.crf:
                 postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
                                         pos_xy_std=CRF_POS_XY_STD,
@@ -388,7 +397,7 @@ def main():
                                         bi_w=CRF_BI_W,)
                 result_crf = crf_process(image, label, crf_output, size, postprocessor)
             if args.save_output_images:
-                if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
+                if args.dataset == 'pascal_voc' or  args.dataset == 'ucm' or args.dataset == 'deepglobe':
                     filename = '{}.png'.format(name[0])
                     savefile = os.path.join(viz_dir, filename)
                     color_file = UCMColorize(output, savefile)
