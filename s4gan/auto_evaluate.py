@@ -157,6 +157,30 @@ def ucm_color_map():
                            [0, 255, 0], [0, 255, 255]])
 
 
+def DeepGlobeColorize(label_mask, save_file):
+        label_colours = deepglobe_color_map()
+        r = label_mask.copy()
+        g = label_mask.copy()
+        b = label_mask.copy()
+        for ll in range(0, 7):
+            r[label_mask == ll] = label_colours[ll, 0]
+            g[label_mask == ll] = label_colours[ll, 1]
+            b[label_mask == ll] = label_colours[ll, 2]
+        rgb = np.zeros((label_mask.shape[0], label_mask.shape[1], 3))
+        rgb[:, :, 0] = r
+        rgb[:, :, 1] = g 
+        rgb[:, :, 2] = b 
+        print(save_file)
+        cv2.imwrite(save_file, rgb)
+
+        return rgb
+
+def deepglobe_color_map():
+        return np.asarray([[0, 255, 255], [255, 255, 0], [255, 0, 255], [0, 255, 0],
+                           [0, 0, 255], [255, 255, 255], [0, 0, 0]])
+
+
+
 def color_map(N=256, normalized=False):
     def bitget(byteval, idx):
         return ((byteval & (1 << idx)) != 0)
@@ -397,10 +421,15 @@ def main():
                                         bi_w=CRF_BI_W,)
                 result_crf = crf_process(image, label, crf_output, size, postprocessor)
             if args.save_output_images:
-                if args.dataset == 'pascal_voc' or  args.dataset == 'ucm' or args.dataset == 'deepglobe':
+                if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
                     filename = '{}.png'.format(name[0])
                     savefile = os.path.join(viz_dir, filename)
                     color_file = UCMColorize(output, savefile)
+                if args.dataset == 'deepglobe':
+                    filename = '{}.png'.format(name[0])
+                    savefile = os.path.join(viz_dir, filename)
+                    color_file = DeepGlobeColorize(output, savefile)
+
 
                 if args.crf:
                     filename = '{}.png'.format(name[0])
