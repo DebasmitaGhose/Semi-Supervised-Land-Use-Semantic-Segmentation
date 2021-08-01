@@ -474,8 +474,8 @@ def main():
                 best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
                 print("CRF Scores saved at: ",best_score_filename_crf)
 
-    with open(best_score_filename, "w") as f:
-        json.dump(best_score, f, indent=4, sort_keys=True)
+        with open(best_score_filename, "w") as f:
+            json.dump(best_score, f, indent=4, sort_keys=True)
 
 
     if args.crf:
