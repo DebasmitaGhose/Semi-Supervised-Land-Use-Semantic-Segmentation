@@ -73,10 +73,9 @@ EXP_OUTPUT_DIR = './s4gan_files'
 EXP_ID="default"
 SAMPLING_TYPE = "uncertainty"
 
+
 def get_arguments():
-    """Pt '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
-st '/home/amth_dg777/project/Satellite_Images/ImageSets/test.txt' 
-rse all the arguments provided from the CLI.
+    """Parse all the arguments provided from the CLI.
 
     Returns:
       A list of parsed arguments.
@@ -146,11 +145,14 @@ rse all the arguments provided from the CLI.
                         help="Regularisation parameter for L2-loss.")
     parser.add_argument("--cuda", type=bool, default=True,
                         help="choose gpu device.")
+    parser.add_argument("--split-id", type=str, default=SPLIT_ID,
+                        help="split order id")
     return parser.parse_args()
 
 args = get_arguments()
 
 np.random.seed(args.random_seed)
+
 
 def get_device(cuda):
     cuda = cuda and torch.cuda.is_available()
@@ -297,6 +299,7 @@ def main():
         str(args.threshold_st)
     )
     if os.path.exists(checkpoint_dir) and  len(os.listdir(checkpoint_dir))!=0:
+
         print("path exists")
         restore_iteration, restore_flag = find_checkpoint(checkpoint_dir)
         if restore_flag == True:
@@ -451,6 +454,7 @@ def main():
         import pdb
         #pdb.set_trace()
         partial_size = int(args.labeled_ratio * train_dataset_size)
+
         #print(partial_size, "partial size")        
         train_ids = np.arange(train_dataset_size)
         #print(train_ids, "train ids")
@@ -459,6 +463,7 @@ def main():
         #print(np.shape(train_ids[:partial_size]), 'train sampler')
         #print(np.shape(train_ids[partial_size:]), 'train remain sampler')        
         print(train_ids[:20])
+
 
         train_sampler = data.sampler.SubsetRandomSampler(train_ids[:partial_size])
         train_remain_sampler = data.sampler.SubsetRandomSampler(train_ids[partial_size:]) #############IMPORTANT patial_size:
