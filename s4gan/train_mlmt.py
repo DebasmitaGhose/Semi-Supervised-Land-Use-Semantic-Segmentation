@@ -20,12 +20,22 @@ from data.dataset_processing import TransformTwice, GaussianBlur, update_ema_var
 
 global_step = 0
 
-TRAIN_DATA = 'train'
-TEST_DATA = 'val'
-TRAIN_IMG_FILE = 'train_img.txt'
-TEST_IMG_FILE = 'val_img.txt'
-TRAIN_LABEL_FILE = 'train_label.txt'
-TEST_LABEL_FILE = 'val_label.txt'
+IMAGE_FOLDER = 'UCMerced_Images/'
+DATA_LIST = '/home/dg777/project/Satellite_Images/UCMImageSets/train_images.txt'
+RANDOM_SEED = 1234
+np.random.seed(args.random_seed)
+
+#DATA_LIST = '/home/dg777/project/Satellite_Images/DeepGlobeImageSets/train_images.txt'
+
+
+
+
+#TRAIN_DATA = 'train'
+#TEST_DATA = 'val'
+#TRAIN_IMG_FILE = 'train_img.txt'
+#TEST_IMG_FILE = 'val_img.txt'
+#TRAIN_LABEL_FILE = 'train_label.txt'
+#TEST_LABEL_FILE = 'val_label.txt'
 
 m = nn.Sigmoid()
 
@@ -43,7 +53,7 @@ def get_arguments():
 
     parser.add_argument("--num-epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--burn-in-epochs", type=int, default=10, help="number of burn-in epochs")
-    parser.add_argument("--evaluation-epochs", type=int, default=5, help="evaluation epochs")
+    parser.add_argument("--evaluation-epochs", type=int, default=0, help="evaluation epochs")
 
     parser.add_argument('--exp-name', type=str, default='default', help="experiment name")
     parser.add_argument('--cons-loss', type=str, default='cosine', help="consistency loss type: cosine")
@@ -55,6 +65,15 @@ def get_arguments():
     parser.add_argument("--labeled-ratio", type=float, default=0.125, help="percent of labeled samples")
     parser.add_argument('--verbose', action='store_true', help='verbose')
 
+    # new  arguments
+    parser.add_argument("--evaluate", action='store_true', default=False, help="whether to evaluate or not")
+    parser.add_argument("--image-folder", type = str, default = IMAGE_FOLDER, help = "Path to the image  folder.")
+    parser.add_argument("--image-list", type = str, default = DATA_LIST,
+                       help = "Path to the file listing the images in the dataset.")
+    parser.add_argument("--dataset", type = str, help = "UCM or Deepglobe")
+    parser.add_argument("--active-learning", action='store_true', default=True)
+
+
     return parser.parse_args()
 
 args = get_arguments()
@@ -65,7 +84,9 @@ if args.verbose:
 def main():
     global global_step
 
-    train_loader_lab, train_loader_unlab, valloader = create_data_loaders()
+    #train_loader_lab, train_loader_unlab, valloader = create_data_loaders()
+    train_loader_lab, train_loader_unlab = create_data_loaders()
+
     print ('data loaders ready !!')
 
     def create_model(ema=False):
@@ -98,7 +119,7 @@ def main():
         train(train_loader_lab, train_loader_unlab, model, model_mt, optimizer, epoch)
         scheduler.step()
 
-        if args.evaluation_epochs and (epoch + 1) % args.evaluation_epochs == 0:
+        if args.evaluate and args.evaluation_epochs and (epoch + 1) % args.evaluation_epochs == 0:
             print ("Evaluating the primary model:")
             validate(valloader, 'val', model, epoch + 1)
             print ("Evaluating the MT model:")
@@ -107,6 +128,8 @@ def main():
 def create_data_loaders():
     channel_stats = dict(mean=[.485, .456, .406],
                          std=[.229, .224, .225])
+
+    #channel_stats = dict
 
     transform_train = transforms.Compose([
         transforms.Resize(size=(320, 320), interpolation=2),
@@ -123,29 +146,69 @@ def create_data_loaders():
         transforms.ToTensor(),
         transforms.Normalize(**channel_stats)
     ])
-
+    '''
     transform_test = transforms.Compose([
         transforms.Resize(size=(320, 320), interpolation=2),
         transforms.ToTensor(),
         transforms.Normalize(**channel_stats)
     ])
-
+    '''
+    
     transform_lab = TransformTwice(transform_train, transform_train)
     transform_unlab = TransformTwice(transform_train, transform_aug)
 
+
+ 
     print ('loading data ...')
     dataset = data.DatasetProcessing(
-        args.data_dir, TRAIN_DATA, TRAIN_IMG_FILE, TRAIN_LABEL_FILE, transform_lab, train=True)
+        args.data_dir, args.image_folder, args.image_list, transform_lab,  args.dataset, train=True,)
 
     dataset_aug = data.DatasetProcessing(
-        args.data_dir, TRAIN_DATA, TRAIN_IMG_FILE, TRAIN_LABEL_FILE, transform_unlab, train=True)
+        args.data_dir, args.image_folder, args.image_list, transform_unlab, args.dataset, train=True,)
 
-    labeled_idxs, unlabeled_idxs = data.split_idxs(args.pkl_file, args.labeled_ratio)
-    print ('number of labeled samples: ', len(labeled_idxs))
-    print ('number of unlabeled samples: ', len(unlabeled_idxs))
 
-    sampler_lab = SubsetRandomSampler(labeled_idxs)
-    sampler_unlab = SubsetRandomSampler(unlabeled_idxs)
+    if args.active_learning:
+        active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
+        print(active_list_path, 'active list path')
+        active_img_names = [i_id.strip() for i_id in open(active_list_path)]
+        print(np.shape(active_img_names), 'active image names')
+        all_img_names = [i_id.strip() for i_id in open(args.image_list)]
+        # print(all_img_names, 'all image names')
+    
+        active_img_names = np.array(active_img_names)
+        all_img_names = np.array(all_img_names)
+
+        '''
+        numpy.isin(element, test_elements, assume_unique=False, invert=False)
+        Calculates element in test_elements, broadcasting over element only.
+        Returns a boolean array of the same shape as element that is True
+        where an element of element is in test_elements and False otherwise.
+        '''
+        active_ids = np.where(np.isin(all_img_names, active_img_names))  # np.isin will return a boolean array of size all_image_names.
+        print(active_ids, 'active ids')
+        active_ids = active_ids[0]
+        print(np.shape(active_ids), 'active ids')
+
+        train_ids = np.arange(train_dataset_size)
+        print(train_ids, 'train_ids')
+        remaining_ids = np.delete(train_ids, active_ids)
+        sampler_lab = SubsetRandomSampler(active_ids)
+        sampler_unlab = SubsetRandomSampler(remaining_ids)
+        
+    
+        print ('number of labeled samples: ', len(labeled_idxs))
+        print ('number of unlabeled samples: ', len(unlabeled_idxs))
+
+    else:
+        train_dataset_size = len(dataset)
+        partial_size = int(args.labeled_ratio * train_dataset_size)
+
+        print(partial_size, "partial size")
+        train_ids = np.arange(train_dataset_size)
+        # print(train_ids, "train ids")
+        np.random.shuffle(train_ids)
+        sampler_lab = SubsetRandomSampler(train_ids[:partial_size])
+        sampler_unlab = SubsetRandomSampler(train_ids[partial_size:])
 
     trainloader_lab = torch.utils.data.DataLoader(dataset,
                                                batch_size=args.batch_size_lab,
@@ -159,9 +222,10 @@ def create_data_loaders():
                                                num_workers=args.workers,
                                                pin_memory=True)
 
-    dataset_test = data.DatasetProcessing(
-        args.data_dir, TEST_DATA, TEST_IMG_FILE, TEST_LABEL_FILE, transform_test, train=False)
+    #dataset_test = data.DatasetProcessing(
+    #    args.data_dir, TEST_DATA, TEST_IMG_FILE, TEST_LABEL_FILE, transform_test, train=False)
 
+    '''
     valloader = torch.utils.data.DataLoader(
         dataset_test,
         batch_size=args.batch_size_val,
@@ -169,8 +233,10 @@ def create_data_loaders():
         num_workers=2 * args.workers,
         pin_memory=True,
         drop_last=False)
+    '''
+    #return trainloader_lab, trainloader_unlab, valloader
+    return trainloader_lab, trainloader_unlab
 
-    return trainloader_lab, trainloader_unlab, valloader
 
 def cosine_loss(p_logits, q_logits):
     return torch.nn.CosineEmbeddingLoss()(q_logits, p_logits.detach(), torch.ones(p_logits.shape[0]).cuda())
@@ -223,7 +289,7 @@ def train(trainloader_lab, trainloader_unlab, model, model_mt, optimizer, epoch)
             w_cons = 0.0
 
         loss = class_loss + w_cons*cons_loss
-
+ 
         class_loss_sum += class_loss.item()
         cons_loss_sum += cons_loss.item()
         loss_sum += loss.item()

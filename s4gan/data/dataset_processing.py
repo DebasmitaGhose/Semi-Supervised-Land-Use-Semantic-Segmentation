@@ -5,21 +5,57 @@ from torch.utils.data.dataset import Dataset
 import numpy as np
 import pickle
 import random
+import re
 from PIL import ImageOps, ImageFilter
 
+
+ucm_classes = np.array(('background',  # always index 0
+                    'airplane', 'bare_soil', 'buildings', 'cars',
+                    'chapparal', 'court', 'dock', 'field', 'grass',
+                    'mobile_home', 'pavement', 'sand', 'sea',
+                    'ship', 'tanks', 'trees',
+                    'water'))
+DEEPGLOBE_DATAMAP = '/home/dg777/project/Satellite_Images/DeepGlobeImageSets/class_map.json'
+
+def crete_deepglobe_labels(img_filename, deepglobe_mapping):
+    label_ids = list()
+    for image in img_filename:
+        class_id = deepglobe_mapping[image]
+        label_ids.append(class_id)
+    return label_ids
+
+def create_ucm_labels(img_filename):
+    label_ids = list()
+    for image in img_filename:
+        print(image)
+        arr = re.split('(\d+)', s)
+        image_name = arr[0]
+        class_id = np.where(ucm_classes==image_name)[0][0]
+        label_ids.append(class_id)
+    return label_ids
+        
 class DatasetProcessing(Dataset):
-    def __init__(self, data_path, img_path, img_filename, label_filename, transform=None, train=False):
-        self.img_path = os.path.join(data_path, img_path)
+    def __init__(self, data_path, img_folder, img_filename,  dataset, transform=None, train=False):
+        self.img_path = os.path.join(data_path, img_folder)
         self.transform = transform
         # reading img file from file
         img_filepath = os.path.join(data_path, img_filename)
         fp = open(img_filepath, 'r')
         self.img_filename = [x.strip() for x in fp]
-        fp.close()
+        fp.close(self.img_filename)
+        
+        if dataset=='UCM':
+            label_ids = create_ucm_labels(self.img_filename)
+        
+        elif dataset=='Deepglobe':
+            deepglobe_mapping = json.load(open(DEEPGLOBE_DATAMAP,'r'))
+            label_ids = crete_deepglobe_labels(self.img_filename,deepglobe_mapping)
+            
+        self.create_labels()
         # reading labels from file
         label_filepath = os.path.join(data_path, label_filename)
         labels = np.loadtxt(label_filepath, dtype=np.int64)
-        self.label = labels
+        self.label = label_ids
         self.train = train
 
     def __getitem__(self, index):
