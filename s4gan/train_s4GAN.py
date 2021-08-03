@@ -61,7 +61,7 @@ WEIGHT_DECAY = 0.0005
 ITER_MAX = 20000
 MOMENTUM = 0.9
 NUM_WORKERS = 0
-RANDOM_SEED = 1234#0
+RANDOM_SEED = 5000
 
 LAMBDA_FM = 0.1
 LAMBDA_ST = 1.0
@@ -392,8 +392,8 @@ def main():
         img_names = [i_id.strip() for i_id in open(args.data_list)]
         img_names = np.array(img_names)
         s4gan_names = img_names[train_ids]
-        print(s4gan_names)
-        np.save('s4gan_names_with_seed_deepglobe',s4gan_names)
+        print(s4gan_names[:32])
+        np.save('s4gan_names_with_seed_deepglobe_'+str(args.random_seed)+'.npy',s4gan_names)
 
 
     if args.labeled_ratio is None:
