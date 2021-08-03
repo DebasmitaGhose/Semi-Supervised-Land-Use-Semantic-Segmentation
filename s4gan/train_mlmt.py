@@ -21,9 +21,10 @@ from data.dataset_processing import TransformTwice, GaussianBlur, update_ema_var
 global_step = 0
 
 IMAGE_FOLDER = 'UCMerced_Images/'
-DATA_LIST = '/home/dg777/project/Satellite_Images/UCMImageSets/train_images.txt'
+DATA_LIST = '/home/dg777/project/Satellite_Images/UCMImageSets/train.txt'
 RANDOM_SEED = 1234
-np.random.seed(args.random_seed)
+SAMPLING_TYPE = "uncertainty"
+np.random.seed(RANDOM_SEED)
 
 #DATA_LIST = '/home/dg777/project/Satellite_Images/DeepGlobeImageSets/train_images.txt'
 
@@ -47,9 +48,9 @@ def get_arguments():
     parser.add_argument("--workers", type=int, default=4, help="number of workers")
     parser.add_argument("--num-classes", type=int, default=21, help="number of classes, For eg 21 in VOC")
 
-    parser.add_argument("--batch-size-lab", type=int, default=16, help="minibatch size of labeled training set")
-    parser.add_argument("--batch-size-unlab", type=int, default=80, help="minibatch size of unlabeled training set")
-    parser.add_argument("--batch-size-val", type=int, default=32, help="minibatch size of validation set")
+    parser.add_argument("--batch-size-lab", type=int, default=1, help="minibatch size of labeled training set")#16
+    parser.add_argument("--batch-size-unlab", type=int, default=1, help="minibatch size of unlabeled training set")#80
+    parser.add_argument("--batch-size-val", type=int, default=1, help="minibatch size of validation set")#32
 
     parser.add_argument("--num-epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--burn-in-epochs", type=int, default=10, help="number of burn-in epochs")
@@ -70,9 +71,10 @@ def get_arguments():
     parser.add_argument("--image-folder", type = str, default = IMAGE_FOLDER, help = "Path to the image  folder.")
     parser.add_argument("--image-list", type = str, default = DATA_LIST,
                        help = "Path to the file listing the images in the dataset.")
-    parser.add_argument("--dataset", type = str, help = "UCM or Deepglobe")
+    parser.add_argument("--dataset-name", type = str, help = "UCM or Deepglobe", default='Deepglobe')
     parser.add_argument("--active-learning", action='store_true', default=True)
-
+    parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
+                        help="sampling technique to use")
 
     return parser.parse_args()
 
@@ -161,11 +163,12 @@ def create_data_loaders():
  
     print ('loading data ...')
     dataset = data.DatasetProcessing(
-        args.data_dir, args.image_folder, args.image_list, transform_lab,  args.dataset, train=True,)
+        args.data_dir, args.image_folder, args.image_list, args.dataset_name, transform_lab, train=True)
 
     dataset_aug = data.DatasetProcessing(
-        args.data_dir, args.image_folder, args.image_list, transform_unlab, args.dataset, train=True,)
+        args.data_dir, args.image_folder, args.image_list, args.dataset_name, transform_unlab,  train=True)
 
+    train_dataset_size = len(dataset)    
 
     if args.active_learning:
         active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
@@ -196,11 +199,10 @@ def create_data_loaders():
         sampler_unlab = SubsetRandomSampler(remaining_ids)
         
     
-        print ('number of labeled samples: ', len(labeled_idxs))
-        print ('number of unlabeled samples: ', len(unlabeled_idxs))
+        print ('number of labeled samples: ', len(active_ids))
+        print ('number of unlabeled samples: ', len(remaining_ids))
 
     else:
-        train_dataset_size = len(dataset)
         partial_size = int(args.labeled_ratio * train_dataset_size)
 
         print(partial_size, "partial size")
@@ -265,7 +267,6 @@ def train(trainloader_lab, trainloader_unlab, model, model_mt, optimizer, epoch)
 
         model_out = m(model(inputs))
         model_mt_out = m(model_mt(inputs))
-
         class_loss = class_criterion(model_out, target)
 
         try:
