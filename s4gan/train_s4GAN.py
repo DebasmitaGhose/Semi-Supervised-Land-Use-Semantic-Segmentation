@@ -147,6 +147,8 @@ def get_arguments():
                         help="choose gpu device.")
     #parser.add_argument("--split-id", type=str, default=SPLIT_ID,
     #                    help="split order id")
+    parser.add_argument("--active-image-path", type=str, default='',
+                        help="path to active learning list of images")
     return parser.parse_args()
 
 args = get_arguments()
@@ -410,11 +412,19 @@ def main():
     
 
     elif args.active_learning:
- 
-        active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
-        print(active_list_path, 'active list path')
-        active_img_names = [i_id.strip() for i_id in open(active_list_path)]
-        print(np.shape(active_img_names), 'active image names')
+        if args.active_image_path == '': 
+            print("default active learning")
+            active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
+            print(active_list_path, 'active list path')
+            active_img_names = [i_id.strip() for i_id in open(active_list_path)]
+            print(np.shape(active_img_names), 'active image names')
+        else:
+            print("ablation active learning")
+            active_list_path = args.sampling_type + '/' + args.active_image_path
+            print(active_list_path, 'active list path')
+            active_img_names = [i_id.strip() for i_id in np.load(active_list_path)]
+            print(np.shape(active_img_names), 'active image names')
+
         all_img_names  = [i_id.strip() for i_id in open(args.data_list)]  
         #print(all_img_names, 'all image names')
         

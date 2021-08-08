@@ -318,8 +318,8 @@ def main():
 
     max_mean_iou = 0.0
     max_crf_mean_iou = 0.0
-	if not os.path.exists(args.save_dir):
-	    os.makedirs(args.save_dir)
+    if not os.path.exists(args.save_dir):
+        os.makedirs(args.save_dir)
 
     model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
     model.cuda()
@@ -375,9 +375,9 @@ def main():
                     batch_size=1, shuffle=False, pin_memory=True)
         interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
         if args.crf:
-        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
-                batch_size=1, shuffle=False, pin_memory=True)
-        interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
+	    testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
+	    batch_size=1, shuffle=False, pin_memory=True)
+	    interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
 
 
     elif args.dataset == 'pascal_context':
@@ -505,23 +505,22 @@ def main():
         ####################auto-evaluate logic to evaluate scores and store the best one######################################################### 
 
         mean_iou = score['Mean IoU']
-        if mean_iou > max_mean_iou:
-            max_mean_iou = mean_iou
-            best_score = score
-            best_iteration = epoch
-            best_score_filename = os.path.join(scores_dir, "best_scores_" + str(epoch) + ".json")
-            print('best so far...'+ str(mean_iou))
-            print("Hey yo!!, Best score found at epoch : " + str(epoch) + "and the score is: " + str(max_mean_iou))
-            print("best Scores saved at: ", best_score_filename)
+        max_mean_iou = mean_iou
+        best_score = score
+        best_iteration = epoch
+        best_score_filename = os.path.join(scores_dir, "best_scores_" + str(epoch) + ".json")
+        print('best so far...'+ str(mean_iou))
+        print("Hey yo!!, Best score found at epoch : " + str(epoch) + "and the score is: " + str(max_mean_iou))
+        print("best Scores saved at: ", best_score_filename)
 
         if args.crf:
             score_crf = scores(gt_list, crf_result_list, args.num_classes)
             crf_mean_iou = score_crf['Mean IoU']
             if crf_mean_iou > max_crf_mean_iou:
-            max_crf_mean_iou = crf_mean_iou
-            best_score_crf = score_crf
-            best_crf_iteration = epoch
-            best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
+                max_crf_mean_iou = crf_mean_iou
+                best_score_crf = score_crf
+                best_crf_iteration = epoch
+                best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
             print("CRF Scores saved at: ",best_score_filename_crf)
 
         with open(best_score_filename, "w") as f:
