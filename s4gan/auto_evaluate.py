@@ -43,6 +43,7 @@ SAVE_DIRECTORY = 'results'
 EXP_ID = "default"
 EXP_OUTPUT_DIR = './s4gan_files'
 
+MLMT_FILE = './mlmt_output/output_ema_p_1_0_voc_5.txt'
 
 ######### CRF ################
 CRF_ITER_MAX = 10 
@@ -103,6 +104,8 @@ def get_arguments():
                         help="labeled ratio of the trained model")
     parser.add_argument("--threshold-st", type=float, default=None,
                         help="threshold st of the trained model")
+    parser.add_argument("--mlmt-file", type = str, default = MLMT_FILE,
+                        help = "Where MLMT output")
     return parser.parse_args()
 
 def makedirs(dirs):
@@ -260,7 +263,8 @@ def get_iou(args, data_list, class_num, save_path=None):
 
 
     for i, iou in enumerate(j_list):
-        print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
+         if j_list[i] > 0:
+            print('class {:2d} {:12} IU {:.2f}'.format(i, classes[i], j_list[i]))
     
     print('meanIOU: ' + str(aveJ) + '\n')
     if save_path:
@@ -365,8 +369,8 @@ def main():
 
 
         if args.with_mlmt:
-            mlmt_preds = np.loadtxt('mlmt_output/output_ema_p_1_0_voc_5.txt', dtype = float) # best mt 0.05
-
+            mlmt_preds = np.loadtxt(args.mlmt_file, dtype = float)
+            
             mlmt_preds[mlmt_preds>=0.2] = 1
             mlmt_preds[mlmt_preds<0.2] = 0 
              

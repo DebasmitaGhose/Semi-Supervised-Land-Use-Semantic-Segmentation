@@ -48,9 +48,9 @@ def get_arguments():
     parser.add_argument("--workers", type=int, default=4, help="number of workers")
     parser.add_argument("--num-classes", type=int, default=21, help="number of classes, For eg 21 in VOC")
 
-    parser.add_argument("--batch-size-lab", type=int, default=1, help="minibatch size of labeled training set")#16
-    parser.add_argument("--batch-size-unlab", type=int, default=1, help="minibatch size of unlabeled training set")#80
-    parser.add_argument("--batch-size-val", type=int, default=1, help="minibatch size of validation set")#32
+    parser.add_argument("--batch-size-lab", type=int, default=16, help="minibatch size of labeled training set")#16
+    parser.add_argument("--batch-size-unlab", type=int, default=80, help="minibatch size of unlabeled training set")#80
+    parser.add_argument("--batch-size-val", type=int, default=32, help="minibatch size of validation set")#32
 
     parser.add_argument("--num-epochs", type=int, default=100, help="number of epochs")
     parser.add_argument("--burn-in-epochs", type=int, default=10, help="number of burn-in epochs")
