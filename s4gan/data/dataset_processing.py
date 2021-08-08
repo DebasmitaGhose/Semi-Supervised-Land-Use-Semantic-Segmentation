@@ -1,5 +1,6 @@
 import torch
 import os
+import json
 from PIL import Image
 from torch.utils.data.dataset import Dataset
 import numpy as np
@@ -14,26 +15,35 @@ ucm_classes = np.array(('background',  # always index 0
                     'chaparral',  'denseresidential', 'forest', 'freeway', 'golfcourse', 'harbor', 
                     'intersection', 'mediumresidential', 'mobilehomepark', 'overpass', 
                     'parkinglot', 'river', 'runway', 'sparseresidential', 'storagetanks', 'tenniscourt'))
+deepglobe_classes = np.array(('agriculture_land', 'water', 'forest_land', 'urban_land', 'rangeland', 'barren_land'))
 DEEPGLOBE_DATAMAP = '/home/dg777/project/Satellite_Images/DeepGlobeImageSets/class_map.json'
 
-def create_one_hot_encoding(label_id):
-    labels_arr = np.zeros(21)
+
+def create_one_hot_encoding(label_id,dataset_name):
+    if dataset_name =='UCM':
+        labels_arr = np.zeros(21)
+    elif dataset_name =='Deepglobe':
+        labels_arr = np.zeros(6)
+
     labels_arr[label_id-1] = 1
     return labels_arr
 
 def create_deepglobe_labels(img_filename, deepglobe_mapping):
     label_ids = list()
     for image in img_filename:
-        class_id = deepglobe_mapping[image]
+        image_id = image.split('.')[0]
+        class_name = deepglobe_mapping[image_id]
+        class_id = np.where(deepglobe_classes==class_name)[0][0]
+        #print(class_name, class_id)
         label_ids.append(class_id)
     return label_ids
 
 def create_ucm_labels(img_filename):
     label_ids = list()
     for image in img_filename:
-        print(image)
+        #print(image)
         arr = re.split('(\d+)', image)
-        print(arr, np.where(ucm_classes==arr[0]))
+        #print(arr, np.where(ucm_classes==arr[0]))
         image_name = arr[0]
         class_id = np.where(ucm_classes==image_name)[0][0]
         label_ids.append(class_id)
@@ -43,20 +53,21 @@ class DatasetProcessing(Dataset):
     def __init__(self, data_path, img_folder, img_filename,  dataset_name, transform=None, train=False):
         self.img_path = os.path.join(data_path, img_folder)
         self.transform = transform
+        self.dataset_name = dataset_name
         label_ids = list()
         # reading img file from file
-        img_filepath = os.path.join(data_path, img_filename)
-        fp = open(img_filepath, 'r')
+        #rint(self.img_path, img_filepath)
+        fp = open(img_filename, 'r')
         self.img_filename = [x.strip() for x in fp]
-        self.img_filename = [image_name + '.tif' for image_name in self.img_filename]
         fp.close()
         #print('dataset_name', dataset_name, self.img_path)
         if dataset_name =='UCM':
             label_ids = create_ucm_labels(self.img_filename)
-        
+            self.img_filename = [image_name + '.tif' for image_name in self.img_filename]      
         elif dataset_name =='Deepglobe':
             deepglobe_mapping = json.load(open(DEEPGLOBE_DATAMAP,'r'))
             label_ids = create_deepglobe_labels(self.img_filename,deepglobe_mapping)
+            self.img_filename = [image_name + '_sat.jpg' for image_name in self.img_filename]
         #print(label_ids)    
         self.label = label_ids
         self.train = train
@@ -80,7 +91,7 @@ class DatasetProcessing(Dataset):
             #    print(index, e) 
         else:
             img = self.transform(img)
-        one_hot_label = create_one_hot_encoding(self.label[index])
+        one_hot_label = create_one_hot_encoding(self.label[index],self.dataset_name)
         label = torch.from_numpy(np.array(one_hot_label))
         label = label.type(torch.FloatTensor)
         if self.train:

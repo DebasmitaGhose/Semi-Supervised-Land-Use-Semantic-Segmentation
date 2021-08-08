@@ -24,8 +24,8 @@ IMAGE_FOLDER = 'UCMerced_Images/'
 DATA_LIST = '/home/dg777/project/Satellite_Images/UCMImageSets/train.txt'
 RANDOM_SEED = 1234
 SAMPLING_TYPE = "uncertainty"
-np.random.seed(RANDOM_SEED)
-
+EXP_OUTPUT_DIR = './mlmt_files'
+SAVE_PRED_EVERY=  1
 #DATA_LIST = '/home/dg777/project/Satellite_Images/DeepGlobeImageSets/train_images.txt'
 
 
@@ -67,25 +67,44 @@ def get_arguments():
     parser.add_argument('--verbose', action='store_true', help='verbose')
 
     # new  arguments
+    parser.add_argument('--exp-id', type=str, default='default', help="experiment id")
     parser.add_argument("--evaluate", action='store_true', default=False, help="whether to evaluate or not")
     parser.add_argument("--image-folder", type = str, default = IMAGE_FOLDER, help = "Path to the image  folder.")
     parser.add_argument("--image-list", type = str, default = DATA_LIST,
                        help = "Path to the file listing the images in the dataset.")
     parser.add_argument("--dataset-name", type = str, help = "UCM or Deepglobe", default='Deepglobe')
-    parser.add_argument("--active-learning", action='store_true', default=True)
+    parser.add_argument("--active-learning", action='store_true', default=False)
     parser.add_argument("--sampling-type", type=str, default=SAMPLING_TYPE,
                         help="sampling technique to use")
-
+    parser.add_argument("--random-seed", type=int, default=RANDOM_SEED,help="random seed")
+    parser.add_argument("--save-pred-every", type=int, default=SAVE_PRED_EVERY,
+                        help="Save summaries and checkpoint every often.")
+    parser.add_argument("--dataset-split", type=str, default='train',
+                        help="train or test")
     return parser.parse_args()
 
 args = get_arguments()
 
+np.random.seed(args.random_seed)
+
 if args.verbose:
     from utils.visualize import progress_bar
+
+def makedirs(dirs):
+    if not os.path.exists(dirs):
+        os.makedirs(dirs)
 
 def main():
     global global_step
 
+   
+    checkpoint_dir = os.path.join(
+        EXP_OUTPUT_DIR,
+        "models",
+        args.exp_id,
+        args.dataset_split,
+        str(args.labeled_ratio))
+    makedirs(checkpoint_dir)
     #train_loader_lab, train_loader_unlab, valloader = create_data_loaders()
     train_loader_lab, train_loader_unlab = create_data_loaders()
 
@@ -118,7 +137,7 @@ def main():
     for epoch in range(args.num_epochs):
         print ('Epoch#: ', epoch)
 
-        train(train_loader_lab, train_loader_unlab, model, model_mt, optimizer, epoch)
+        train(train_loader_lab, train_loader_unlab, model, model_mt, optimizer, epoch, checkpoint_dir)
         scheduler.step()
 
         if args.evaluate and args.evaluation_epochs and (epoch + 1) % args.evaluation_epochs == 0:
@@ -171,12 +190,12 @@ def create_data_loaders():
     train_dataset_size = len(dataset)    
 
     if args.active_learning:
-        active_list_path = args.sampling_type + '/' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
-        print(active_list_path, 'active list path')
+        active_list_path =  args.sampling_type + '/' + args.dataset_name + '_' + args.sampling_type + '_' + str(args.labeled_ratio) + '.txt'
+        #print(active_list_path, 'active list path')
         active_img_names = [i_id.strip() for i_id in open(active_list_path)]
-        print(np.shape(active_img_names), 'active image names')
+        #print(np.shape(active_img_names), 'active image names')
         all_img_names = [i_id.strip() for i_id in open(args.image_list)]
-        # print(all_img_names, 'all image names')
+        #print(all_img_names, 'all image names')
     
         active_img_names = np.array(active_img_names)
         all_img_names = np.array(all_img_names)
@@ -188,12 +207,12 @@ def create_data_loaders():
         where an element of element is in test_elements and False otherwise.
         '''
         active_ids = np.where(np.isin(all_img_names, active_img_names))  # np.isin will return a boolean array of size all_image_names.
-        print(active_ids, 'active ids')
+        #print(active_ids, 'active ids')
         active_ids = active_ids[0]
-        print(np.shape(active_ids), 'active ids')
+        #print(np.shape(active_ids), 'active ids')
 
         train_ids = np.arange(train_dataset_size)
-        print(train_ids, 'train_ids')
+        #print(train_ids, 'train_ids')
         remaining_ids = np.delete(train_ids, active_ids)
         sampler_lab = SubsetRandomSampler(active_ids)
         sampler_unlab = SubsetRandomSampler(remaining_ids)
@@ -243,7 +262,7 @@ def create_data_loaders():
 def cosine_loss(p_logits, q_logits):
     return torch.nn.CosineEmbeddingLoss()(q_logits, p_logits.detach(), torch.ones(p_logits.shape[0]).cuda())
 
-def train(trainloader_lab, trainloader_unlab, model, model_mt, optimizer, epoch):
+def train(trainloader_lab, trainloader_unlab, model, model_mt, optimizer, epoch, checkpoint_dir):
     global global_step
 
     loss_sum = 0.0
@@ -308,6 +327,10 @@ def train(trainloader_lab, trainloader_unlab, model, model_mt, optimizer, epoch)
         global_step += 1
         update_ema_variables(model, model_mt, args.ema_decay, global_step)
 
+        if epoch % args.save_pred_every == 0 and epoch!=0:       
+            torch.save(model.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(epoch)+'.pth'))
+            torch.save(model_mt.module.state_dict(),os.path.join(checkpoint_dir, 'checkpoint'+str(epoch)+'_mt.pth'))
+   
         if args.verbose:
             progress_bar(batch_idx, len(trainloader_lab), 'Loss: %.3f |  Class Loss: %.3f |  Cons Loss: %.3f | Avg Acc: %.3f | Avg Acc MT: %.3f '
                 % (loss_sum/(batch_idx+1), class_loss_sum/(batch_idx+1), cons_loss_sum/(batch_idx+1), avg_acc_sum/(batch_idx+1), avg_acc_sum_mt/(batch_idx+1)))
