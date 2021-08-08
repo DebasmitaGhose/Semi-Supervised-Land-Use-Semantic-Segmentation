@@ -55,6 +55,7 @@ CRF_BI_W = 4
 
 SAMPLING_TYPE = 'uncertainty'
 
+m = nn.Sigmoid()
 MLMT_EXP_OUTPUT_DIR = './mlmt_files'
 
 def get_arguments():
@@ -108,8 +109,14 @@ def get_arguments():
                         help="threshold st of the trained model")
     parser.add_argument("--mlmt-file", type = str, default = MLMT_FILE,
                         help = "Where MLMT output")
- 
     
+    parser.add_argument("--mlmt-epoch", type = int, default = 100,
+                        help = "Where MLMT output")
+    parser.add_argument("--epoch", type = int, default = 100,
+                        help = "s4gan best epoch")
+    parser.add_argument("--mlmt-exp-id", type=str, default=EXP_ID,
+                        help= "unique id to identify all files of an experiment")
+
     return parser.parse_args()
 
 def makedirs(dirs):
@@ -289,167 +296,202 @@ def crf_process(image, label, logit, size, postprocessor):
         crf_label = np.argmax(prob_post, axis=0)
         return crf_label
 
+def create_model(ema=False):
+    model = models.resnet101(pretrained=True)
+    model.fc = nn.Linear(2048, args.num_classes)
+    model = torch.nn.DataParallel(model)
+    model.cuda()
+    cudnn.benchmark = True
+
+    if ema:
+        for param in model.parameters():
+            param.detach_()
+    return model
+
+
 def main():
     """Create the model and start the evaluation process."""
     
     args = get_arguments()
     gpu0 = args.gpu
-    start = args.start_eval
-    end = args.end_eval
-    step = args.step_eval
+    epoch = args.epoch
 
     max_mean_iou = 0.0
     max_crf_mean_iou = 0.0
-    for epoch in range(start,end+1,step):        
-        if not os.path.exists(args.save_dir):
-            os.makedirs(args.save_dir)
+	if not os.path.exists(args.save_dir):
+	    os.makedirs(args.save_dir)
 
-        model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
-        model.cuda()
+    model = DeepLabV2_ResNet101_MSC(n_classes=args.num_classes)
+    model.cuda()
 
-        if args.restore_from[:4] == 'http' :
-            saved_state_dict = model_zoo.load_url(args.restore_from)
-        #elif EXP_ID == "default":
-        #    print("Restoring from default")
-        #    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
-        elif args.threshold_st is not None:
-            print("Loading new weights")
-            print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'), 'saved weights')
-            saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'))
+    if args.restore_from[:4] == 'http' :
+        saved_state_dict = model_zoo.load_url(args.restore_from)
+    #elif EXP_ID == "default":
+    #    print("Restoring from default")
+    #    saved_state_dict = torch.load(os.path.join(RESTORE_FROM))
+    elif args.threshold_st is not None:
+        print("Loading new weights")
+        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'), 'saved weights')
+        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train",str(args.labeled_ratio), str(args.threshold_st) ,'checkpoint'+str(epoch)+'.pth'))
 
-        else:
-            print("Loading old weights")
-            #saved_state_dict = torch.load(args.restore_from)
-            print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'), 'saved weights')
-            saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'))
-            #print("Restoring from: ", saved_state_dict)
+    else:
+        print("Loading old weights")
+        #saved_state_dict = torch.load(args.restore_from)
+        print(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'), 'saved weights')
+        saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.exp_id, "train", 'checkpoint'+str(epoch)+'.pth'))
+        #print("Restoring from: ", saved_state_dict)
+
+    model.load_state_dict(saved_state_dict)
+
+    model.eval()
+    model.cuda(gpu0)
+
+    #MLMT model
+    mlmt_model = create_model()
+
+    print(os.path.join(MLMT_EXP_OUTPUT_DIR, "models", args.mlmt_exp_id, "train",str(args.labeled_ratio), 'checkpoint'+str(mlmt_epoch)+'.pth'), 'saved weights')
+
+    saved_state_dict = torch.load(os.path.join(EXP_OUTPUT_DIR, "models", args.mlmt_exp_id, "train",str(args.labeled_ratio) ,'checkpoint'+str(mlmt_epoch)+'.pth'))
+
+    model.load_state_dict(saved_state_dict)
+    model.eval() 
+    model.cuda(gpu0)
+     
+
+      
+
+    if args.dataset == 'pascal_voc':
+        testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
+                    batch_size=1, shuffle=False, pin_memory=True)
+        interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
+
+    elif args.dataset == 'deepglobe':
+        testloader = data.DataLoader(DeepGlobeDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type,  crop_size=(320, 320), mean=IMG_MEAN, scale=False, mirror=False),
+                    batch_size=1, shuffle=False, pin_memory=True)
+        interp = nn.Upsample(size=(320, 320), mode='bilinear', align_corners=True)
+
+    elif args.dataset == 'ucm':
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
+                    batch_size=1, shuffle=False, pin_memory=True)
+        interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
+        if args.crf:
+        testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
+                batch_size=1, shuffle=False, pin_memory=True)
+        interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
+
+
+    elif args.dataset == 'pascal_context':
+        input_transform = transform.Compose([transform.ToTensor(),
+            transform.Normalize([.485, .456, .406], [.229, .224, .225])])
+        data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': 512}
+        data_loader = get_loader('pascal_context')
+        data_path = get_data_path('pascal_context')
+        test_dataset = data_loader(data_path, split='val', mode='val', **data_kwargs)
+        testloader = data.DataLoader(test_dataset, batch_size=1, drop_last=False, shuffle=False, num_workers=1, pin_memory=True)
+        interp = nn.Upsample(size=(512, 512), mode='bilinear', align_corners=True)
+
+    elif args.dataset == 'cityscapes':
+        data_loader = get_loader('cityscapes')
+        data_path = get_data_path('cityscapes')
+        test_dataset = data_loader( data_path, img_size=(512, 1024), is_transform=True, split='val')
+        testloader = data.DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True)
+        interp = nn.Upsample(size=(512, 1024), mode='bilinear', align_corners=True)
+            
+    data_list = []
+    gt_list = []
+    output_list = []
+    crf_result_list = []
+
+    '''
+    if args.with_mlmt:
+        mlmt_preds = np.loadtxt(args.mlmt_file, dtype = float)
         
-        model.load_state_dict(saved_state_dict)
-
-        model.eval()
-        model.cuda(gpu0)
-
+        mlmt_preds[mlmt_preds>=0.2] = 1
+        mlmt_preds[mlmt_preds<0.2] = 0 
+    '''     
+    for index, batch in enumerate(testloader):
+        if index % 1 == 0:
+        print('%d processd'%(index))
+        image, label, size, name, _ = batch
+        size = size[0]
+        output  = model(Variable(image, volatile=True).cuda(gpu0))
+        output = output.clone().detach()
+        output = interp(output).cpu().data[0].numpy()
+        
+        #MLMT
+        '''
+        For MLMT, we do not need labels(since we are just using the prediction to improve s4gan prediction
+        Hence, we only need s4gan GT label
+        Thus, we can use same s4gan dataloader for MLMT
+        '''
+        image, _, size, name, _ = batch
+        size = size[0]    
+        mlmt_output = m(model(inputs))
+        mlmt_output = mlmt_output.cpu().numpy()
+         
         if args.dataset == 'pascal_voc':
-            testloader = data.DataLoader(VOCDataSet(args.data_dir, args.data_list, crop_size=(320, 240), mean=IMG_MEAN, scale=False, mirror=False), 
-                                    batch_size=1, shuffle=False, pin_memory=True)
-            interp = nn.Upsample(size=(320, 240), mode='bilinear', align_corners=True)
-
-        elif args.dataset == 'deepglobe':
-            testloader = data.DataLoader(DeepGlobeDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type,  crop_size=(320, 320), mean=IMG_MEAN, scale=False, mirror=False),
-                                    batch_size=1, shuffle=False, pin_memory=True)
-            interp = nn.Upsample(size=(320, 320), mode='bilinear', align_corners=True)
-
+        output = output[:,:size[0],:size[1]]
+        gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
         elif args.dataset == 'ucm':
-            testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, args.active_learning, args.labeled_ratio, args.sampling_type, crop_size=(256,256), mean=IMG_MEAN, scale=False, mirror=False),
-                                    batch_size=1, shuffle=False, pin_memory=True)
-            interp = nn.Upsample(size=(256,256), mode='bilinear', align_corners=True) #320, 240 # align_corners = True
-            if args.crf:
-                testloader = data.DataLoader(UCMDataSet(args.data_dir, args.data_list, crop_size=(256, 256), mean=IMG_MEAN, scale=False, mirror=False),
-                                batch_size=1, shuffle=False, pin_memory=True)
-                interp = nn.Upsample(size=(256, 256), mode='bilinear', align_corners=True) #320, 240
-
-
+        output = output[:,:size[0],:size[1]]
+        gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
+        elif args.dataset == 'deepglobe':
+        output = output[:,:size[0],:size[1]]
+        gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
         elif args.dataset == 'pascal_context':
-            input_transform = transform.Compose([transform.ToTensor(),
-                    transform.Normalize([.485, .456, .406], [.229, .224, .225])])
-            data_kwargs = {'transform': input_transform, 'base_size': 512, 'crop_size': 512}
-            data_loader = get_loader('pascal_context')
-            data_path = get_data_path('pascal_context')
-            test_dataset = data_loader(data_path, split='val', mode='val', **data_kwargs)
-            testloader = data.DataLoader(test_dataset, batch_size=1, drop_last=False, shuffle=False, num_workers=1, pin_memory=True)
-            interp = nn.Upsample(size=(512, 512), mode='bilinear', align_corners=True)
-
+        gt = np.asarray(label[0].numpy(), dtype=np.int)
         elif args.dataset == 'cityscapes':
-            data_loader = get_loader('cityscapes')
-            data_path = get_data_path('cityscapes')
-            test_dataset = data_loader( data_path, img_size=(512, 1024), is_transform=True, split='val')
-            testloader = data.DataLoader(test_dataset, batch_size=1, shuffle=False, pin_memory=True)
-            interp = nn.Upsample(size=(512, 1024), mode='bilinear', align_corners=True)
-                    
-        data_list = []
-        gt_list = []
-        output_list = []
-        crf_result_list = []
-
+        gt = np.asarray(label[0].numpy(), dtype=np.int)
 
         if args.with_mlmt:
-            mlmt_preds = np.loadtxt(args.mlmt_file, dtype = float)
+        for i in range(args.num_classes):
+            output[i]= output[i]*mlmt_output[i]
             
-            mlmt_preds[mlmt_preds>=0.2] = 1
-            mlmt_preds[mlmt_preds<0.2] = 0 
-             
-        for index, batch in enumerate(testloader):
-            if index % 1 == 0:
-                print('%d processd'%(index))
-            image, label, size, name, _ = batch
-            size = size[0]
-            output  = model(Variable(image, volatile=True).cuda(gpu0))
-            crf_output = output.clone().detach()
-            output = interp(output).cpu().data[0].numpy()
-                
-            if args.dataset == 'pascal_voc':
-                output = output[:,:size[0],:size[1]]
-                gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
-            elif args.dataset == 'ucm':
-                output = output[:,:size[0],:size[1]]
-                gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
-            elif args.dataset == 'deepglobe':
-                output = output[:,:size[0],:size[1]]
-                gt = np.asarray(label[0].numpy()[:size[0],:size[1]], dtype=np.int)
-            elif args.dataset == 'pascal_context':
-                gt = np.asarray(label[0].numpy(), dtype=np.int)
-            elif args.dataset == 'cityscapes':
-                gt = np.asarray(label[0].numpy(), dtype=np.int)
+        output = output.transpose(1,2,0)
+        output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
+        if args.labeled_ratio is not None:
+            viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
+            viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf", str(args.labeled_ratio), str(args.threshold_st))
+        else:
+            viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
+            viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
 
-            if args.with_mlmt:
-                for i in range(args.num_classes):
-                    output[i]= output[i]*mlmt_preds[index][i]
-                    
-            output = output.transpose(1,2,0)
-            output = np.asarray(np.argmax(output, axis=2), dtype=np.int)
-            if args.labeled_ratio is not None:
-                viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
-                viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf", str(args.labeled_ratio), str(args.threshold_st))
-            else:
-                viz_dir = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id, args.dataset_split)
-                viz_dir_crf = os.path.join(EXP_OUTPUT_DIR, "output_viz", args.exp_id,  args.dataset_split, "crf")
+        if not os.path.exists(viz_dir):
+            makedirs(viz_dir)
+        if args.crf:
+            if not os.path.exists(viz_dir_crf):
+                makedirs(viz_dir_crf)
+        #print("Visualization dst:", viz_dir)
+        if args.crf:
+            postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
+                    pos_xy_std=CRF_POS_XY_STD,
+                    pos_w=CRF_POS_W,
+                    bi_xy_std=CRF_BI_XY_STD,
+                    bi_rgb_std=CRF_BI_RGB_STD,
+                    bi_w=CRF_BI_W,)
+        result_crf = crf_process(image, label, crf_output, size, postprocessor)
+        if args.save_output_images:
+            if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
+                filename = '{}.png'.format(name[0])
+                savefile = os.path.join(viz_dir, filename)
+                color_file = UCMColorize(output, savefile)
+            if args.dataset == 'deepglobe':
+                filename = '{}.png'.format(name[0])
+                savefile = os.path.join(viz_dir, filename)
+                color_file = DeepGlobeColorize(output, savefile)
 
-            if not os.path.exists(viz_dir):
-                makedirs(viz_dir)
+
             if args.crf:
-                if not os.path.exists(viz_dir_crf):
-                    makedirs(viz_dir_crf)
-            #print("Visualization dst:", viz_dir)
-            if args.crf:
-                postprocessor = DenseCRF(iter_max=CRF_ITER_MAX,
-                                        pos_xy_std=CRF_POS_XY_STD,
-                                        pos_w=CRF_POS_W,
-                                        bi_xy_std=CRF_BI_XY_STD,
-                                        bi_rgb_std=CRF_BI_RGB_STD,
-                                        bi_w=CRF_BI_W,)
-                result_crf = crf_process(image, label, crf_output, size, postprocessor)
-            if args.save_output_images:
-                if args.dataset == 'pascal_voc' or  args.dataset == 'ucm':
-                    filename = '{}.png'.format(name[0])
-                    savefile = os.path.join(viz_dir, filename)
-                    color_file = UCMColorize(output, savefile)
-                if args.dataset == 'deepglobe':
-                    filename = '{}.png'.format(name[0])
-                    savefile = os.path.join(viz_dir, filename)
-                    color_file = DeepGlobeColorize(output, savefile)
-
-
-                if args.crf:
-                    filename = '{}.png'.format(name[0])
-                    savefile = os.path.join(viz_dir_crf, filename)
-                    color_file = UCMColorize(result_crf, savefile)
-                    
+                filename = '{}.png'.format(name[0])
+                savefile = os.path.join(viz_dir_crf, filename)
+                color_file = UCMColorize(result_crf, savefile)
+            
             data_list.append([gt.flatten(), output.flatten()])
 
             gt_list.append(gt)
             output_list.append(output)
             if args.crf:
-                crf_result_list.append(result_crf)
+            crf_result_list.append(result_crf)
 
         if args.labeled_ratio is not None:
             scores_dir = os.path.join(EXP_OUTPUT_DIR, "scores", args.exp_id, args.dataset_split, str(args.labeled_ratio), str(args.threshold_st))
@@ -461,7 +503,7 @@ def main():
         score = scores(gt_list, output_list, args.num_classes)
         print(score)
         ####################auto-evaluate logic to evaluate scores and store the best one######################################################### 
-      
+
         mean_iou = score['Mean IoU']
         if mean_iou > max_mean_iou:
             max_mean_iou = mean_iou
@@ -476,11 +518,11 @@ def main():
             score_crf = scores(gt_list, crf_result_list, args.num_classes)
             crf_mean_iou = score_crf['Mean IoU']
             if crf_mean_iou > max_crf_mean_iou:
-                max_crf_mean_iou = crf_mean_iou
-                best_score_crf = score_crf
-                best_crf_iteration = epoch
-                best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
-                print("CRF Scores saved at: ",best_score_filename_crf)
+            max_crf_mean_iou = crf_mean_iou
+            best_score_crf = score_crf
+            best_crf_iteration = epoch
+            best_score_filename_crf = os.path.join(scores_dir,"best_scores_crf_" + str(epoch) + ".json")
+            print("CRF Scores saved at: ",best_score_filename_crf)
 
         with open(best_score_filename, "w") as f:
             json.dump(best_score, f, indent=4, sort_keys=True)

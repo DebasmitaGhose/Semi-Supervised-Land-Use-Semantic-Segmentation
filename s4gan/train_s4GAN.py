@@ -145,8 +145,8 @@ def get_arguments():
                         help="Regularisation parameter for L2-loss.")
     parser.add_argument("--cuda", type=bool, default=True,
                         help="choose gpu device.")
-    parser.add_argument("--split-id", type=str, default=SPLIT_ID,
-                        help="split order id")
+    #parser.add_argument("--split-id", type=str, default=SPLIT_ID,
+    #                    help="split order id")
     return parser.parse_args()
 
 args = get_arguments()
